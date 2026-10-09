@@ -12,11 +12,13 @@ rbview shows Rust source as a read-only Ruby projection, so Rubyists can read Ru
 |---|---|
 | `src/emit.rs` | Rust AST (`syn`) → Ruby text + position map. Most changes land here. The rename tables are at the top |
 | `src/out.rs` | output buffer: UTF-16 position tracking, segments, verbatim lines |
-| `src/lib.rs` / `src/main.rs` | `generate()`, the `.rbview/` cache, symbols / the CLI (`gen`, `build`) |
+| `src/range.rs` | source ranges of items, statements and arms read off the syntax tree (for the block map) |
+| `src/lib.rs` / `src/main.rs` | `generate()`, the `.rbview/` cache, symbols / the CLI (`gen`, `build`, `bench`) |
+| `src/bench.rs` | `rbview bench`: in-process phase timings and output digests ([performance](docs/performance.md)) |
 | `editors/vscode/` | VS Code extension: `extension.js` (providers), `srcmap.js` (position lookup), prebuilt `.vsix`, tests |
 | `tests/golden/` | golden cases (`*.rs` → `*.rb`): the executable translation spec |
 | `tests/corpus/` | the pinned 66-crate regression corpus (fetched, never built) |
-| `docs/` | [intent](docs/intent.md), [specs](docs/spec/), [decision records](docs/decisions/), [testing](docs/testing.md) |
+| `docs/` | [intent](docs/intent.md), [specs](docs/spec/), [decision records](docs/decisions/), [testing](docs/testing.md), [performance](docs/performance.md) |
 | `scripts/` | `check.sh` (run before committing), `setup.sh`, corpus/LSP checks, attribution guard |
 | `tools/capture/` | regenerates `docs/media/` screenshots and the GIF in real VS Code |
 | `.claude/` | shared Claude Code settings, hooks and skills |

@@ -4,9 +4,15 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+mimalloc = { version = "0.1.52", default-features = false }
 proc-macro2 = { version = "1.0.107", features = ["span-locations"] }
 quote = "1.0.47"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
 sha2 = "0.11.0"
-syn = { version = "2", features = ["full", "visit", "extra-traits", "printing"] }
+syn = { version = "2", features = ["full", "printing"] }
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+

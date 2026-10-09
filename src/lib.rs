@@ -4,8 +4,10 @@
 //! position map (see `docs/spec/source-map.md`). The CLI in `main.rs` adds the
 //! `.rbview/` cache around it (see `docs/spec/cache.md`).
 
+pub mod bench;
 pub mod emit;
 pub mod out;
+pub mod range;
 
 use emit::Gen;
 pub use emit::Kind;

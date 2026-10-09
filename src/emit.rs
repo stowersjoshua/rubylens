@@ -5,6 +5,7 @@
 //! can route go-to-definition / hover / references through rust-analyzer.
 
 use crate::out::Out;
+use crate::range::node_range;
 use proc_macro2::{LineColumn, Span, TokenStream, TokenTree};
 use quote::ToTokens;
 use std::collections::HashMap;
@@ -193,46 +194,43 @@ fn is_const_case(s: &str) -> bool {
     s.chars().any(|c| c.is_alphabetic()) && s.chars().all(|c| c.is_uppercase() || c.is_ascii_digit() || c == '_')
 }
 
-/// Min/max source positions covered by a syntax node's tokens.
+/// Source range of a syntax node: the start of its first located token to the end of its last.
+///
+/// syn prints tokens in source order, so the first and last located tokens bound the node and
+/// only those two need a position lookup (each `start()`/`end()` is a binary search in
+/// proc-macro2's line table). Tokens without a location (line 0, synthesized) are skipped.
 pub fn tok_range<T: ToTokens + ?Sized>(t: &T) -> Option<(LineColumn, LineColumn)> {
-    fn walk(ts: TokenStream, acc: &mut Option<(LineColumn, LineColumn)>) {
-        fn upd(acc: &mut Option<(LineColumn, LineColumn)>, a: LineColumn, b: LineColumn) {
-            if a.line == 0 {
-                return;
-            }
-            let lt = |x: &LineColumn, y: &LineColumn| (x.line, x.column) < (y.line, y.column);
-            match acc {
-                None => *acc = Some((a, b)),
-                Some((lo, hi)) => {
-                    if lt(&a, lo) {
-                        *lo = a;
-                    }
-                    if lt(hi, &b) {
-                        *hi = b;
-                    }
+    /// First located span (`first`) and last located span (`last`) in `ts`, in order.
+    fn walk(ts: TokenStream, first: &mut Option<Span>, last: &mut Option<Span>) {
+        fn see(first: &mut Option<Span>, last: &mut Option<Span>, sp: Span) {
+            if first.is_none() {
+                if sp.start().line == 0 {
+                    return;
                 }
+                *first = Some(sp);
             }
+            *last = Some(sp);
         }
         for tt in ts {
             match tt {
                 TokenTree::Group(g) => {
                     if g.delimiter() == proc_macro2::Delimiter::None {
-                        walk(g.stream(), acc);
+                        walk(g.stream(), first, last);
                     } else {
-                        upd(acc, g.span_open().start(), g.span_open().end());
-                        upd(acc, g.span_close().start(), g.span_close().end());
+                        see(first, last, g.span_open());
+                        see(first, last, g.span_close());
                     }
                 }
-                other => {
-                    let sp = other.span();
-                    upd(acc, sp.start(), sp.end());
-                }
+                other => see(first, last, other.span()),
             }
         }
     }
-    let mut acc = None;
-    walk(t.to_token_stream(), &mut acc);
-    acc
+    let (mut first, mut last) = (None, None);
+    walk(t.to_token_stream(), &mut first, &mut last);
+    let a = first?.start();
+    // `last` may be an unlocated (synthesized) token; fall back to the first located one then.
+    let b = last.map(|s| s.end()).filter(|b| b.line != 0).unwrap_or_else(|| first.unwrap().end());
+    Some((a, b))
 }
 
 /// `%q` delimiters that are safe for `text` (None: needs an escaped "..." string).
@@ -388,22 +386,27 @@ impl<'a> Gen<'a> {
                         self.tokens_rec(g.stream(), prev);
                         continue;
                     }
-                    self.tok_spaced(open, g.span_open(), prev);
+                    let (so, sc) = (g.span_open(), g.span_close());
+                    self.tok_spaced(open, so.start(), so.end(), prev);
                     self.tokens_rec(g.stream(), prev);
-                    self.tok_spaced(close, g.span_close(), prev);
+                    self.tok_spaced(close, sc.start(), sc.end(), prev);
                 }
                 leaf => {
-                    let (a, b) = (leaf.span().start(), leaf.span().end());
-                    let text =
-                        if a.line != 0 && a.line == b.line { self.out.src_exact(a, b) } else { leaf.to_string() };
-                    self.tok_spaced(&text, leaf.span(), prev);
+                    // each start()/end() is a line-table search: look them up once per token
+                    let sp = leaf.span();
+                    let (a, b) = (sp.start(), sp.end());
+                    if a.line != 0 && a.line == b.line {
+                        let text = self.out.src_exact(a, b);
+                        self.tok_spaced(&text, a, b, prev);
+                    } else {
+                        self.tok_spaced(&leaf.to_string(), a, b, prev);
+                    }
                 }
             }
         }
     }
 
-    fn tok_spaced(&mut self, text: &str, sp: Span, prev: &mut Option<LineColumn>) {
-        let (a, b) = (sp.start(), sp.end());
+    fn tok_spaced(&mut self, text: &str, a: LineColumn, b: LineColumn, prev: &mut Option<LineColumn>) {
         // comments are single lines: a multi-line literal must not break out of one
         let flat;
         let text = if text.contains('\n') {
@@ -548,7 +551,7 @@ impl<'a> Gen<'a> {
             let rb_start = self.out.line;
             self.item(it);
             self.out.nl();
-            self.out.block(rb_start, tok_range(it));
+            self.out.block(rb_start, node_range(it));
         }
     }
 
@@ -760,7 +763,7 @@ impl<'a> Gen<'a> {
                     self.item(&it);
                     self.in_module = prev;
                     self.out.nl();
-                    self.out.block(rb_start, tok_range(&it));
+                    self.out.block(rb_start, node_range(&it));
                 }
             }
         }
@@ -927,7 +930,7 @@ impl<'a> Gen<'a> {
                 }
             }
             self.out.nl();
-            self.out.block(rb_start, tok_range(it));
+            self.out.block(rb_start, node_range(it));
         }
         self.self_ty = prev;
         self.out.indent -= 1;
@@ -1011,7 +1014,7 @@ impl<'a> Gen<'a> {
             let rb_start = self.out.line;
             self.impl_item(it);
             self.out.nl();
-            self.out.block(rb_start, tok_range(it));
+            self.out.block(rb_start, node_range(it));
         }
         self.self_ty = prev;
         self.out.indent -= 1;
@@ -1064,7 +1067,7 @@ impl<'a> Gen<'a> {
                             let rb_start = self.out.line;
                             self.impl_item(sub);
                             self.out.nl();
-                            self.out.block(rb_start, tok_range(sub));
+                            self.out.block(rb_start, node_range(sub));
                         }
                         self.out.nl();
                         self.out.push("# }");
@@ -1111,7 +1114,7 @@ impl<'a> Gen<'a> {
             let rb_start = self.out.line;
             self.stmt(s);
             self.out.nl();
-            self.out.block(rb_start, tok_range(s));
+            self.out.block(rb_start, node_range(s));
         }
     }
 
@@ -2291,7 +2294,7 @@ impl<'a> Gen<'a> {
             }
             self.out.indent -= 1;
             self.out.nl();
-            self.out.block(rb_start, tok_range(arm));
+            self.out.block(rb_start, node_range(arm));
         }
         self.out.push("end");
     }

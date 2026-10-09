@@ -10,6 +10,7 @@ Short records of choices that shape rbview, so nobody (human or agent) has to re
 | [0004](0004-source-map-format.md) | Token-level source maps in UTF-16 columns; the code line wins | Accepted |
 | [0005](0005-single-source-tables.md) | Renames and erasures live in tables in `src/emit.rs` | Accepted |
 | [0006](0006-deterministic-core.md) | The view is deterministic; no generated prose in the core path | Accepted |
+| [0007](0007-allocator-and-release-profile.md) | mimalloc and a link-time-optimized release build | Accepted |
 
 ## When to write one
 

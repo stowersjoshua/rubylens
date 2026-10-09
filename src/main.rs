@@ -14,7 +14,8 @@ fn usage() -> ! {
         "rbview — read Rust code as Ruby\n\n\
          USAGE:\n  \
          rbview gen <file.rs> [--root DIR] [--json] [--no-cache]   print the Ruby view of one file\n  \
-         rbview build [DIR] [--force]                              pre-generate views for every .rs file\n\n\
+         rbview build [DIR] [--force]                              pre-generate views for every .rs file\n  \
+         rbview bench <file-or-dir>... [--repeat N] [--top K] [--digest FILE]   in-process benchmark\n\n\
          Views are cached in <repo>/.rbview/ (self-gitignored)."
     );
     std::process::exit(2)
@@ -77,6 +78,10 @@ fn main() {
             let dir = positional.first().map(PathBuf::from).unwrap_or_else(|| PathBuf::from("."));
             cmd_build(&dir, flag("--force"));
         }
+        "bench" => rbview::bench::run(&args[1..]),
         _ => usage(),
     }
 }
+
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
