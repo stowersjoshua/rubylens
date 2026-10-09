@@ -1,0 +1,30 @@
+{
+  "name": "rust-analyzer",
+  "publisher": "rust-lang",
+  "displayName": "rust-analyzer (minimal stand-in client)",
+  "description": "Minimal LSP client that launches a rust-analyzer binary. Used only to capture rbview demos where the official extension can't be installed.",
+  "version": "0.0.1",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "main": "./extension.js",
+  "activationEvents": [
+    "onLanguage:rust",
+    "workspaceContains:Cargo.toml"
+  ],
+  "contributes": {
+    "configuration": {
+      "title": "rust-analyzer",
+      "properties": {
+        "rust-analyzer.server.path": {
+          "type": "string",
+          "default": "rust-analyzer"
+        }
+      }
+    }
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  }
+}

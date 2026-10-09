@@ -1,0 +1,12 @@
+{
+  "name": "rbview-capture",
+  "private": true,
+  "type": "module",
+  "description": "Captures screenshots and a GIF of rbview running in VS Code (code-server).",
+  "dependencies": {
+    "puppeteer-core": "^25.13.0"
+  },
+  "optionalDependencies": {
+    "@sparticuz/chromium": "^153.0.0"
+  }
+}

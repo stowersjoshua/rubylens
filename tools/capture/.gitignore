@@ -1,0 +1,3 @@
+node_modules/
+rust-analyzer-client/node_modules/
+rust-analyzer-client/*.vsix
