@@ -87,19 +87,22 @@ Like `.git` or `.idea`, a hidden folder at the repo root caches everything:
 | `.gitignore` | ignores the whole folder, so nothing is ever committed |
 | `_prelude.rb` | stub definitions for Rust-isms (`Ok`, `Err`, `try!`, `unwrap`, `enumerate`, …) |
 | `symbols.json` | crate-wide type kinds, so `impl Shape` knows `Shape` is an enum (a Ruby `module`) |
+| `index.json` | the types each file defined at the last `rbview build`, so unchanged files aren't parsed again |
 | `src/**.rb`, `*.rb.map.json` | generated views and their position maps, mirroring the repo |
 | `ext/<crate>-<version>/**` | views of dependency sources (registry crates are immutable, so they stay cached) |
 
-Every entry is keyed by a hash of the source **and of the generator itself**, so editing a file or upgrading rbview invalidates exactly what changed. Deleting the folder is always safe.
+Every view is keyed by a hash of the source **and of the generator itself**, and records the crate-wide type kinds it relied on. Editing a file, changing a type it uses, or upgrading rbview invalidates exactly what changed. Deleting the folder is always safe.
 
 Speed, measured on tokio (555 files):
 
 | | |
 |---|---|
-| Cold `rbview build` | 1.3 s |
-| Warm `rbview build` | 0.6 s |
-| Single 1,600-line file, uncached | 19 ms |
-| Single 1,600-line file, cached | 3 ms |
+| Cold `rbview build` | 0.36 s |
+| Warm `rbview build` (nothing changed) | 0.016 s |
+| Single 1,600-line file, uncached | 8 ms |
+| Single 1,600-line file, cached | 2.6 ms |
+
+[docs/performance.md](docs/performance.md) has the details, how to measure, and the rules that keep it fast.
 
 ## Translation cheatsheet
 

@@ -25,6 +25,7 @@ Measured with `rbview bench` on the corpus (2,789 files, 48.5 MB, best of 3, sam
 ## Consequences
 
 - About 30% less time per view, for every user, with no change to output.
+- mimalloc scans the environment for its options when the process starts. With a typical environment that's lost in the noise; with a very large one (23 KB) it adds about 0.5 ms to every `rbview gen`, about a fifth of a small-file cache hit.
 - Building rbview needs a C compiler for mimalloc. Every platform that builds Rust crates with C code already has one.
 - An incremental release build takes about 17 s instead of 6 s. `scripts/check.sh` builds release, so each check run pays this once.
 - The allocator choice can't change output (decision [0006](0006-deterministic-core.md)); the digest comparison in [docs/performance.md](../performance.md) proves it for each change.

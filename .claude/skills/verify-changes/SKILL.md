@@ -13,6 +13,7 @@ description: Use before committing or declaring any change to rbview done, or wh
 | anything else | `scripts/check.sh` |
 | `src/emit.rs`, `src/out.rs`, `src/lib.rs`, `editors/vscode/srcmap.js` | `scripts/check.sh --full` |
 | how the demo looks | also `tools/capture/capture.sh` (see the `update-extension` skill) |
+| anything for speed | `scripts/bench-corpus.sh --digest` before and after must match (see the `improve-performance` skill) |
 | a check itself (`scripts/check.sh`, `tests/golden.rs`, corpus or guard scripts) | commit, then `scripts/check-the-checks.sh`, which tests the last commit |
 
 First run in a fresh clone? `scripts/setup.sh` enables the git hooks and installs lint deps.
@@ -34,10 +35,12 @@ First run in a fresh clone? `scripts/setup.sh` enables the git hooks and install
 | markdown links | a relative link points nowhere | fix the path |
 | corpus | rendering regressed on real code | `scripts/corpus-check.py --show 20` for examples; fix the rule |
 | navigation | jumps land wrong against real rust-analyzer | `debug-navigation` skill |
+| generation scales linearly | some input shape got superlinear (the failing case says which) | find the per-token or per-level rescan (`improve-performance` skill); never raise `MAX_RATIO` |
+| cache tests | a view is reused when stale, regenerated when fresh, or written non-atomically | read `docs/spec/cache.md`; anything the emitter learns from outside the file goes through `Gen::kind_of` |
 
 ## Never
 
-- **Lower a threshold** (`MIN_COVERAGE`, corpus limits, `--min 100`) to make a change pass, unless the PR argues the trade explicitly.
+- **Lower a threshold** (`MIN_COVERAGE`, corpus limits, `--min 100`, `MAX_RATIO`) to make a change pass, unless the PR argues the trade explicitly.
 - **Update golden snapshots** without reading the diff.
 - **Skip `--full`** after changing the emitter or position lookup.
 - **Report "checks pass"** without running them. Quote the summary line.

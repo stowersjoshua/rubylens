@@ -1,8 +1,10 @@
 //! Output buffer that tracks Ruby line/column (UTF-16, like LSP) and records
 //! the mapping from Ruby tokens back to Rust source spans.
 
+use crate::emit::Kind;
 use proc_macro2::LineColumn;
 use serde::Serialize;
+use std::collections::BTreeMap;
 
 /// One mapped token: [rb_line, rb_col, rb_len, rs_line, rs_col, rs_len]
 /// All lines are 0-based, all columns/lengths are UTF-16 code units.
@@ -11,10 +13,14 @@ pub type Seg = [u32; 6];
 /// Coarse mapping of a statement or item: [rb_start, rb_end, rs_start, rs_end] (lines, 0-based, inclusive)
 pub type Block = [u32; 4];
 
+/// Field order matters: the cache reads `version`, `hash` and `deps` from the start of the file
+/// without parsing the rest (see `cached_deps` in `src/cache.rs`).
 #[derive(Serialize, Default)]
 pub struct SourceMap {
     pub version: u32,
     pub hash: String,
+    /// Crate-wide symbol kinds the view relied on (see `Gen::deps`).
+    pub deps: BTreeMap<String, Option<Kind>>,
     pub segs: Vec<Seg>,
     pub blocks: Vec<Block>,
 }
@@ -27,11 +33,55 @@ pub struct Out {
     at_line_start: bool,
     pub segs: Vec<Seg>,
     pub blocks: Vec<Block>,
-    /// The Rust source and, per line (as `str::lines` splits it), its byte range and whether
-    /// it is pure ASCII. On ASCII lines a proc-macro2 char column is also the byte offset and
-    /// the UTF-16 column, so the common case needs no scanning.
+    /// The Rust source, and its lines as `str::lines` splits them.
     src: String,
-    src_lines: Vec<(usize, usize, bool)>,
+    src_lines: Vec<SrcLine>,
+}
+
+/// One source line. proc-macro2 columns count chars; the map needs UTF-16 columns and slicing
+/// needs bytes. On an ASCII line all three agree. Other lines get a table so every conversion
+/// is O(1), however long the line.
+struct SrcLine {
+    start: usize,
+    end: usize,
+    /// For a non-ASCII line: (byte offset, UTF-16 column) of each char, plus one for the end.
+    wide: Option<Box<[(u32, u32)]>>,
+}
+
+impl SrcLine {
+    fn new(src: &str, line: &str) -> SrcLine {
+        let start = line.as_ptr() as usize - src.as_ptr() as usize;
+        let wide = (!line.is_ascii()).then(|| {
+            let mut col16 = 0u32;
+            let mut t: Vec<(u32, u32)> = line
+                .char_indices()
+                .map(|(i, c)| {
+                    let at = (i as u32, col16);
+                    col16 += c.len_utf16() as u32;
+                    at
+                })
+                .collect();
+            t.push((line.len() as u32, col16));
+            t.into_boxed_slice()
+        });
+        SrcLine { start, end: start + line.len(), wide }
+    }
+
+    /// Byte offset of char column `col`, clamped to the line's length.
+    fn byte_at(&self, col: usize) -> usize {
+        match &self.wide {
+            None => col.min(self.end - self.start),
+            Some(t) => t[col.min(t.len() - 1)].0 as usize,
+        }
+    }
+
+    /// UTF-16 column of char column `col`, clamped to the line's length.
+    fn col16(&self, col: usize) -> u32 {
+        match &self.wide {
+            None => col.min(self.end - self.start) as u32,
+            Some(t) => t[col.min(t.len() - 1)].1,
+        }
+    }
 }
 
 impl Out {
@@ -45,25 +95,14 @@ impl Out {
             segs: vec![],
             blocks: vec![],
             src: src.to_string(),
-            src_lines: src
-                .lines()
-                .map(|l| {
-                    let start = l.as_ptr() as usize - src.as_ptr() as usize;
-                    (start, start + l.len(), l.is_ascii())
-                })
-                .collect(),
+            src_lines: src.lines().map(|l| SrcLine::new(src, l)).collect(),
         }
     }
 
-    /// Text of source line `ln` (1-based, like proc-macro2) and whether it is ASCII.
-    fn src_line(&self, ln: usize) -> Option<(&str, bool)> {
-        let &(start, end, ascii) = self.src_lines.get(ln.wrapping_sub(1))?;
-        Some((&self.src[start..end], ascii))
-    }
-
-    /// Byte offset of char column `col` in `text`, clamped to its length.
-    fn byte_at(text: &str, ascii: bool, col: usize) -> usize {
-        if ascii { col.min(text.len()) } else { text.char_indices().nth(col).map_or(text.len(), |(i, _)| i) }
+    /// Source line `ln` (1-based, like proc-macro2) and its text.
+    fn src_line(&self, ln: usize) -> Option<(&SrcLine, &str)> {
+        let l = self.src_lines.get(ln.wrapping_sub(1))?;
+        Some((l, &self.src[l.start..l.end]))
     }
 
     fn write_raw(&mut self, s: &str) {
@@ -90,8 +129,13 @@ impl Out {
 
     fn ensure_indent(&mut self) {
         if self.at_line_start {
-            for _ in 0..self.indent {
-                self.buf.push_str("  ");
+            // a few copies per line, however deep the nesting
+            const SPACES: &str = "                                                                ";
+            let mut n = 2 * self.indent;
+            while n > 0 {
+                let k = n.min(SPACES.len());
+                self.buf.push_str(&SPACES[..k]);
+                n -= k;
             }
             self.col += 2 * self.indent as u32;
             self.at_line_start = false;
@@ -175,7 +219,7 @@ impl Out {
             return;
         }
         let lines: Vec<(usize, &str)> =
-            (from.line..=to.line).filter_map(|ln| self.src_line(ln).map(|(t, _)| (ln, t))).collect();
+            (from.line..=to.line).filter_map(|ln| self.src_line(ln).map(|(_, t)| (ln, t))).collect();
         let dedent = lines
             .iter()
             .filter(|(_, t)| t.chars().any(|ch| !ch.is_whitespace()))
@@ -203,8 +247,7 @@ impl Out {
     /// Convert a proc-macro2 char column to a UTF-16 column for the given source line.
     pub fn col16(&self, lc: LineColumn) -> u32 {
         match self.src_line(lc.line) {
-            Some((text, true)) => lc.column.min(text.len()) as u32,
-            Some((text, false)) => text.chars().take(lc.column).map(|c| c.len_utf16() as u32).sum(),
+            Some((l, _)) => l.col16(lc.column),
             None => lc.column as u32,
         }
     }
@@ -212,8 +255,8 @@ impl Out {
     /// Exact source text between two positions on the same line (char columns).
     pub fn src_exact(&self, a: LineColumn, b: LineColumn) -> String {
         match self.src_line(a.line) {
-            Some((text, ascii)) if a.line == b.line => {
-                let (i, j) = (Self::byte_at(text, ascii, a.column), Self::byte_at(text, ascii, b.column));
+            Some((l, text)) if a.line == b.line => {
+                let (i, j) = (l.byte_at(a.column), l.byte_at(b.column));
                 text[i..j.max(i)].to_string()
             }
             _ => self.src_text(a, b),
@@ -227,9 +270,9 @@ impl Out {
             return s;
         }
         for ln in a.line..=b.line {
-            let Some((text, ascii)) = self.src_line(ln) else { break };
-            let from = if ln == a.line { Self::byte_at(text, ascii, a.column) } else { 0 };
-            let to = if ln == b.line { Self::byte_at(text, ascii, b.column) } else { text.len() };
+            let Some((l, text)) = self.src_line(ln) else { break };
+            let from = if ln == a.line { l.byte_at(a.column) } else { 0 };
+            let to = if ln == b.line { l.byte_at(b.column) } else { text.len() };
             if from < to {
                 s.push_str(&text[from..to]);
             }

@@ -13,7 +13,8 @@ rbview shows Rust source as a read-only Ruby projection, so Rubyists can read Ru
 | `src/emit.rs` | Rust AST (`syn`) → Ruby text + position map. Most changes land here. The rename tables are at the top |
 | `src/out.rs` | output buffer: UTF-16 position tracking, segments, verbatim lines |
 | `src/range.rs` | source ranges of items, statements and arms read off the syntax tree (for the block map) |
-| `src/lib.rs` / `src/main.rs` | `generate()`, the `.rbview/` cache, symbols / the CLI (`gen`, `build`, `bench`) |
+| `src/lib.rs` / `src/main.rs` | `generate()` / the CLI (`gen`, `build`, `bench`) |
+| `src/cache.rs` | the `.rbview/` cache: when a view is reused, symbol kinds, `rbview build` |
 | `src/bench.rs` | `rbview bench`: in-process phase timings and output digests ([performance](docs/performance.md)) |
 | `editors/vscode/` | VS Code extension: `extension.js` (providers), `srcmap.js` (position lookup), prebuilt `.vsix`, tests |
 | `tests/golden/` | golden cases (`*.rs` → `*.rb`): the executable translation spec |
@@ -42,7 +43,7 @@ rbview shows Rust source as a read-only Ruby projection, so Rubyists can read Ru
 4. Run `scripts/check.sh`. If you touched `src/emit.rs`, `src/out.rs` or `editors/vscode/srcmap.js`, run `scripts/check.sh --full`.
 5. Update docs that state what you changed: the spec row, README tables or numbers, and a decision record if you made a real choice.
 
-Skills in `.claude/skills/` walk through the common cases step by step: `change-translation`, `debug-navigation`, `update-extension` and `verify-changes`. They're plain markdown, so any agent can follow them.
+Skills in `.claude/skills/` walk through the common cases step by step: `change-translation`, `debug-navigation`, `update-extension`, `improve-performance` and `verify-changes`. They're plain markdown, so any agent can follow them.
 
 ## Commands
 
@@ -52,6 +53,7 @@ scripts/check.sh                                  # before every commit
 scripts/check.sh --full                           # + 66-crate corpus + real rust-analyzer navigation
 UPDATE_GOLDEN=1 cargo test --test golden          # rewrite golden snapshots (then review the diff)
 scripts/check-the-checks.sh                       # after changing any check: proves each still catches its mistake
+scripts/bench-corpus.sh --repeat 3 --digest FILE  # time generation on the corpus; diff digests to prove output unchanged
 cargo build --release && ./target/release/rbview gen path/to/file.rs   # print one view
 ./target/release/rbview gen path/to/file.rs --json                     # view + map
 ```
@@ -75,7 +77,9 @@ cargo build --release && ./target/release/rbview gen path/to/file.rs   # print o
 - **Duplicated tokens.** If a Rust token appears twice in the view (e.g. the signature comment and `def`), only the code occurrence may be mapped (`src_tokens_except`). Otherwise jumps land in comments.
 - **Keyword spans.** Map keywords to their own token (`return_token`, `question_token`), not the whole expression; multi-line spans degrade to one character.
 - **The cache invalidates itself** when anything in `src/` changes (`build.rs` fingerprint). Don't add manual version bumps. `GEN_VERSION` is only for map format changes.
+- **Knowledge from outside the file** (today only `symbols.json` kinds) must go through `Gen::kind_of`, which records it in the map's `deps`. Anything read around it makes cached views go stale silently ([0008](docs/decisions/0008-views-record-their-symbol-kinds.md)).
 - **The demo view** `examples/demo/shapes.rb` must be regenerated after output changes (enforced).
+- **Keep generation linear.** Don't call `to_token_stream()` on items or statements (use `node_range`), look up a span's position once, and never rescan a line or list per token. `scripts/scaling-check.py` fails otherwise ([performance](docs/performance.md)).
 - **Formatting:** rustfmt uses `max_width = 120`. Run `cargo fmt` rather than hand-wrapping.
 - **The live Claude Code hook** blocks any Bash command that contains both `git commit` and attribution text, even a test. Keep such text in fixture files (see `scripts/fixtures/`).
 - **No VS Code or rust-analyzer download?** `scripts/lsp-check.sh` accepts `RUST_ANALYZER=…`, and `tools/capture/README.md` explains the stand-in client.

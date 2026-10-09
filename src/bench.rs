@@ -15,7 +15,6 @@
 use crate::emit::Gen;
 use crate::{GEN_VERSION, SourceMap, module_path};
 use sha2::{Digest, Sha256};
-use std::collections::HashMap;
 use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -55,7 +54,7 @@ fn collect(path: &Path, out: &mut Vec<PathBuf>) {
 }
 
 /// One generation with phase timings; returns (phases, digest of ruby + map if asked, bytes).
-fn measure(file: &Path, kinds: &HashMap<String, crate::Kind>, digest: bool) -> (Phases, String, usize) {
+fn measure(file: &Path, kinds: &crate::KindMap, digest: bool) -> (Phases, String, usize) {
     let mut ph = Phases::default();
     let t = Instant::now();
     let src = fs::read_to_string(file).unwrap_or_default();
@@ -71,7 +70,13 @@ fn measure(file: &Path, kinds: &HashMap<String, crate::Kind>, digest: bool) -> (
             let mut g = Gen::new(&src, kinds);
             g.file(&ast, &module_path(file));
             let out = g.out;
-            let map = SourceMap { version: GEN_VERSION, hash: String::new(), segs: out.segs, blocks: out.blocks };
+            let map = SourceMap {
+                version: GEN_VERSION,
+                hash: String::new(),
+                deps: g.deps,
+                segs: out.segs,
+                blocks: out.blocks,
+            };
             ph.emit = t.elapsed();
             (out.buf, map)
         }
@@ -139,7 +144,7 @@ pub fn run(args: &[String]) {
         eprintln!("rbview bench: no .rs files under {paths:?}");
         std::process::exit(2);
     }
-    let kinds = HashMap::new();
+    let kinds = crate::KindMap::default();
 
     // Each file: best of `repeat` runs (least noisy estimate of the cost).
     let mut rows: Vec<(PathBuf, usize, Phases, String)> = Vec::with_capacity(files.len());

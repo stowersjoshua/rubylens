@@ -16,7 +16,7 @@
 use proc_macro2::{TokenStream, TokenTree};
 use rbview::emit::{DROPPED_METHODS, KEYWORD_RENAMES, MACRO_RENAMES, METHOD_RENAMES};
 use rbview::{SourceMap, generate};
-use std::collections::{BTreeSet, HashMap};
+use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -128,7 +128,7 @@ struct Case {
 
 fn run(path: &Path) -> Case {
     let rust = fs::read_to_string(path).unwrap();
-    let g = generate(&rust, path, &HashMap::new());
+    let g = generate(&rust, path, &Default::default());
     assert!(g.parse_error.is_none(), "{}: syn could not parse the case: {:?}", path.display(), g.parse_error);
     Case { name: name(path), rust, ruby: g.ruby, map: g.map }
 }

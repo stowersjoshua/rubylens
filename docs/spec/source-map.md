@@ -8,8 +8,9 @@ Every view comes with a map that translates positions between the Ruby view and 
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "hash": "9f2c…",
+  "deps": { "Shape": "enum", "Point": null },
   "segs":   [[rb_line, rb_col, rb_len, rs_line, rs_col, rs_len], …],
   "blocks": [[rb_start, rb_end, rs_start, rs_end], …]
 }
@@ -19,8 +20,11 @@ Every view comes with a map that translates positions between the Ruby view and 
 |---|---|
 | `version` | map format version (`GEN_VERSION` in `src/lib.rs`); bump only when this format changes |
 | `hash` | cache key: source + generator fingerprint ([cache.md](cache.md)) |
+| `deps` | crate-wide symbol kinds the view relied on, so the cache can tell when it's stale ([cache.md](cache.md)). Editors ignore it |
 | `segs` | one per mapped token: a Ruby range and the Rust range it came from |
 | `blocks` | one per item, statement and match arm: Ruby line range ↔ Rust line range, inclusive |
+
+`version`, `hash` and `deps` are written first, in that order: the cache validates a view by reading only the start of its map.
 
 **Units.** Lines are 0-based. Columns and lengths are UTF-16 code units, which is LSP's unit, so positions pass to and from the editor unchanged.
 

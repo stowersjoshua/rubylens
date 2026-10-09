@@ -83,6 +83,23 @@ echo "12. a view lookup that scans every block (quadratic outlines in big files)
 mutate editors/vscode/srcmap.js 'return (line) => (line >= 0 && line <= max && owner[line] >= 0 ? blocks[owner[line]] : null);' 'return (line) => blocks.filter((bl) => line >= bl[a] && line <= bl[b]).sort((x, y) => (x[b] - x[a]) - (y[b] - y[a]))[0] || null;'
 caught "extension tests (lookup scaling)" "FAIL: fallback lookups scale" node editors/vscode/test/run.js
 
+echo "13. a cached view reused after a symbol kind it relied on changed"
+mutate src/cache.rs 'deps.is_empty() || {' 'true || {'
+caught "cache tests (stale kinds)" "views_follow_the_symbol_kinds_they_used.*FAILED" cargo test -q --test cache
+
+echo "14. cache files written in place, so a parallel reader can see half a file"
+mutate src/cache.rs 'write_atomic(rb_path, ruby.as_bytes())?;' 'fs::write(rb_path, ruby.as_bytes())?;'
+mutate src/cache.rs 'write_atomic(map_path, map_json.as_bytes())' 'fs::write(map_path, map_json.as_bytes())'
+caught "cache tests (atomic writes)" "concurrent_readers_never_see_a_half_written_view.*FAILED" cargo test -q --test cache
+
+echo "15. statement ranges found by re-tokenizing each statement again (O(size x depth))"
+mutate src/emit.rs 'self.out.block(rb_start, node_range(s));' 'self.out.block(rb_start, tok_range(s));'
+caught "scaling check (nesting)" "FAIL: superlinear generation for: nested ifs" sh -c 'cargo build --release -q 2>/dev/null && scripts/scaling-check.py'
+
+echo "16. UTF-16 columns found by scanning the line for every token"
+mutate src/out.rs 'Some((l, _)) => l.col16(lc.column),' 'Some((_, text)) => text.chars().take(lc.column).map(|c| c.len_utf16() as u32).sum(),'
+caught "scaling check (long lines)" "FAIL: superlinear generation for: long ASCII line" sh -c 'cargo build --release -q 2>/dev/null && scripts/scaling-check.py'
+
 echo
 echo "$pass caught, $fail missed"
 [ $fail = 0 ]

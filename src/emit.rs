@@ -8,7 +8,8 @@ use crate::out::Out;
 use crate::range::node_range;
 use proc_macro2::{LineColumn, Span, TokenStream, TokenTree};
 use quote::ToTokens;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
+use std::hash::{BuildHasherDefault, Hasher};
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
 use syn::*;
@@ -131,18 +132,49 @@ pub const METHOD_RENAMES: &[(&str, &str)] = &[
     ("pow", "pow"),
 ];
 
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Debug, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Kind {
     Struct,
     Enum,
     Trait,
 }
 
+/// Type name -> kind. `rbview gen` loads the crate-wide table (`symbols.json`, tens of thousands of
+/// names in a big repo) on every run, and SipHash was most of that cost; FNV is plenty for short
+/// identifiers from the reader's own files.
+pub type KindMap = HashMap<String, Kind, BuildHasherDefault<Fnv>>;
+
+/// 64-bit FNV-1a.
+pub struct Fnv(u64);
+
+impl Default for Fnv {
+    fn default() -> Self {
+        Fnv(0xcbf2_9ce4_8422_2325)
+    }
+}
+
+impl Hasher for Fnv {
+    fn write(&mut self, bytes: &[u8]) {
+        for &b in bytes {
+            self.0 = (self.0 ^ b as u64).wrapping_mul(0x0100_0000_01b3);
+        }
+    }
+
+    fn finish(&self) -> u64 {
+        self.0
+    }
+}
+
 pub struct Gen<'a> {
     pub out: Out,
     /// Crate-wide knowledge (from .rbview/symbols.json + this file): type name -> kind.
-    pub kinds: &'a HashMap<String, Kind>,
-    local_kinds: HashMap<String, Kind>,
+    pub kinds: &'a KindMap,
+    /// Every crate-wide kind the view relied on (name -> kind, None if unknown). Stored in the map
+    /// so a cached view is regenerated when `symbols.json` changes what it assumed.
+    pub deps: BTreeMap<String, Option<Kind>>,
+    /// Types this file defines (`collect_kinds`).
+    pub local_kinds: KindMap,
     self_ty: Option<String>,
     /// true while emitting items inside a Ruby `module` (free fns become `def self.x`)
     in_module: bool,
@@ -308,11 +340,12 @@ fn escape_rb(s: &str) -> String {
 }
 
 impl<'a> Gen<'a> {
-    pub fn new(src: &str, kinds: &'a HashMap<String, Kind>) -> Self {
+    pub fn new(src: &str, kinds: &'a KindMap) -> Self {
         Gen {
             out: Out::new(src),
             kinds,
-            local_kinds: HashMap::new(),
+            deps: BTreeMap::new(),
+            local_kinds: KindMap::default(),
             self_ty: None,
             in_module: false,
             deferred: vec![],
@@ -322,8 +355,13 @@ impl<'a> Gen<'a> {
         }
     }
 
-    fn kind_of(&self, name: &str) -> Option<Kind> {
-        self.local_kinds.get(name).or_else(|| self.kinds.get(name)).copied()
+    fn kind_of(&mut self, name: &str) -> Option<Kind> {
+        if let Some(k) = self.local_kinds.get(name) {
+            return Some(*k);
+        }
+        let k = self.kinds.get(name).copied();
+        self.deps.insert(name.to_string(), k);
+        k
     }
 
     // ---------------------------------------------------------------- tokens
@@ -498,25 +536,8 @@ impl<'a> Gen<'a> {
     // ---------------------------------------------------------------- file / items
 
     pub fn file(&mut self, f: &File, module_path: &[String]) {
-        // Pre-scan local type kinds
-        fn scan(items: &[Item], m: &mut HashMap<String, Kind>) {
-            for it in items {
-                match it {
-                    Item::Struct(s) => {
-                        m.insert(s.ident.to_string(), Kind::Struct);
-                    }
-                    Item::Enum(e) => {
-                        m.insert(e.ident.to_string(), Kind::Enum);
-                    }
-                    Item::Trait(t) => {
-                        m.insert(t.ident.to_string(), Kind::Trait);
-                    }
-                    Item::Mod(ItemMod { content: Some((_, items)), .. }) => scan(items, m),
-                    _ => {}
-                }
-            }
-        }
-        scan(&f.items, &mut self.local_kinds);
+        // the types this file defines win over crate-wide knowledge
+        crate::collect_kinds(&f.items, &mut self.local_kinds);
 
         self.out.push("# frozen_string_literal: true\n");
         self.out.push("# rbview: read-only Ruby projection of Rust source. Not executable.\n");
@@ -2302,9 +2323,16 @@ impl<'a> Gen<'a> {
     // ---------------------------------------------------------------- macros
 
     fn macro_call(&mut self, mac: &Macro) {
+        self.macro_call_parsed(mac, None)
+    }
+
+    /// [`Self::macro_call`] with the body already parsed as call arguments, if the caller did.
+    fn macro_call_parsed(&mut self, mac: &Macro, parsed: Option<Punctuated<Expr, Token![,]>>) {
         let name = mac.path.segments.last().map(|s| s.ident.to_string()).unwrap_or_default();
         let span = mac.path.span();
-        let parse_args = || mac.parse_body_with(Punctuated::<Expr, Token![,]>::parse_terminated).ok();
+        let mut parsed = parsed;
+        let mut parse_args =
+            || parsed.take().or_else(|| mac.parse_body_with(Punctuated::<Expr, Token![,]>::parse_terminated).ok());
         match name.as_str() {
             "println" | "print" | "eprintln" | "eprint" | "format" | "panic" | "write" | "writeln" | "format_args"
             | "unreachable" | "todo" | "unimplemented" | "bail" | "anyhow" => {
@@ -2520,8 +2548,8 @@ impl<'a> Gen<'a> {
             return;
         }
         // body parses as call arguments: show as a bang call
-        if mac.parse_body_with(Punctuated::<Expr, Token![,]>::parse_terminated).is_ok() {
-            return self.macro_call(mac);
+        if let Ok(args) = mac.parse_body_with(Punctuated::<Expr, Token![,]>::parse_terminated) {
+            return self.macro_call_parsed(mac, Some(args));
         }
         // anything else (tokio::select!, DSLs): verbatim, mapped line by line
         match tok_range(mac) {

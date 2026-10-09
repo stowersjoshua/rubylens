@@ -9,7 +9,7 @@ A language model could produce more idiomatic Ruby for a method body, or explain
 
 ## Decision
 
-The view rbview generates is a pure function of the Rust source and the rbview version: same input, same bytes. No network calls and no model calls happen in `src/`.
+The view rbview generates is a pure function of the Rust source, the rbview version and the crate-wide symbol kinds it looked up (recorded in its map, [0008](0008-views-record-their-symbol-kinds.md)): same input, same bytes. No network calls and no model calls happen in `src/`.
 
 A future "explain this method" feature may exist only as a **separate, clearly labelled layer**, such as a hover or side panel. It must be cached by content hash and never replace, edit or interleave with the mapped view.
 

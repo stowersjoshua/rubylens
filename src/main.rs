@@ -6,7 +6,7 @@
 //! Generated views, position maps and a crate-wide symbol index live in a
 //! hidden `.rbview/` folder at the repo root (like `.git` or `.idea`).
 
-use rbview::{CACHE_DIR, cmd_build, find_root, gen_cached, load_kinds};
+use rbview::{CACHE_DIR, Kinds, cmd_build, find_root, gen_cached};
 use std::path::PathBuf;
 
 fn usage() -> ! {
@@ -53,19 +53,19 @@ fn main() {
             });
             let root = opt("--root").map(PathBuf::from).unwrap_or_else(|| find_root(&file));
             let root = root.canonicalize().unwrap_or(root);
-            let kinds = load_kinds(&root.join(CACHE_DIR));
+            let kinds = Kinds::lazy(&root.join(CACHE_DIR));
             match gen_cached(&file, &root, &kinds, !flag("--no-cache")) {
-                Ok((ruby, map, rb_path, from_cache, _)) => {
+                Ok(v) => {
                     if flag("--json") {
                         println!(
                             "{{\"rbPath\":{},\"cached\":{},\"ruby\":{},\"map\":{}}}",
-                            serde_json::to_string(&rb_path.to_string_lossy()).unwrap(),
-                            from_cache,
-                            serde_json::to_string(&ruby).unwrap(),
-                            map
+                            serde_json::to_string(&v.rb_path.to_string_lossy()).unwrap(),
+                            v.cached,
+                            serde_json::to_string(&v.ruby).unwrap(),
+                            v.map_json
                         );
                     } else {
-                        print!("{ruby}");
+                        print!("{}", v.ruby);
                     }
                 }
                 Err(e) => {
@@ -76,7 +76,7 @@ fn main() {
         }
         "build" => {
             let dir = positional.first().map(PathBuf::from).unwrap_or_else(|| PathBuf::from("."));
-            cmd_build(&dir, flag("--force"));
+            eprintln!("{}", cmd_build(&dir, flag("--force")));
         }
         "bench" => rbview::bench::run(&args[1..]),
         _ => usage(),

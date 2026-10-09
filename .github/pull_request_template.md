@@ -12,5 +12,6 @@
 - [ ] Golden case added or updated and its diff reviewed; `docs/spec/` row updated
 - [ ] No threshold lowered, or the trade-off is argued above
 - [ ] Extension changed → `.vsix` rebuilt; UI changed → `tools/capture/capture.sh` re-run and images reviewed
+- [ ] Speed-related change → `scripts/bench-corpus.sh --digest` identical before and after; numbers in `docs/performance.md` updated if they moved
 - [ ] Docs that state behaviour or numbers (README, specs) still match
 - [ ] No AI attribution in commits or in this description

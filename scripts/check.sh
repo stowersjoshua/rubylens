@@ -83,7 +83,8 @@ js_deps() { [ -d node_modules ] || npm install --silent --no-audit --no-fund; }
 step "build"                         cargo build --release --quiet
 step "rustfmt"                       cargo fmt --check
 step "clippy"                        cargo clippy --all-targets --quiet -- -D warnings
-step "golden tests (cargo test)"     cargo test --quiet
+step "tests (cargo test)"            cargo test --quiet
+step "generation scales linearly"   scripts/scaling-check.py
 step "eslint"                        sh -c 'npm install --silent --no-audit --no-fund >/dev/null 2>&1 || true; npx eslint .'
 step "extension tests (mock vscode)" node editors/vscode/test/run.js
 step "attribution guards"            scripts/guard-selftest.sh

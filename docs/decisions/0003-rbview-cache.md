@@ -1,6 +1,6 @@
 # 0003. Cache views in a self-ignoring `.rbview/` folder, keyed by source and generator
 
-Status: Accepted
+Status: Accepted, amended by [0008](0008-views-record-their-symbol-kinds.md)
 Date: 2026-10-09
 
 ## Context
