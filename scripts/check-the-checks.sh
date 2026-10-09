@@ -59,6 +59,10 @@ echo "7. a commit that credits an AI tool"
 printf 'x\n' > note.txt && git add note.txt
 caught "commit-msg hook" "contains AI attribution" git commit -q -F scripts/fixtures/commit-msg-attributed.txt
 
+echo "7b. a commit made under an AI tool's identity"
+printf 'x\n' > note.txt && git add note.txt
+caught "commit-msg hook (identity)" "an AI tool's identity" git -c user.name=Claude -c user.email=noreply@anthropic.com commit -q -F scripts/fixtures/commit-msg-clean.txt
+
 echo "8. a cache folder committed"
 mkdir -p .rbview && printf 'x' > .rbview/leak.rb && git add -f .rbview/leak.rb
 caught "no tracked build output" "^no tracked build output +✗" scripts/check.sh

@@ -32,7 +32,7 @@ rbview shows Rust source as a read-only Ruby projection, so Rubyists can read Ru
 5. **Deterministic output.** No network calls, model calls, randomness or time in `src/` ([0006](docs/decisions/0006-deterministic-core.md)).
 6. **Spec, golden test and code change together.** A translation change without a golden case and a spec row fails `cargo test`.
 7. **Never lower a threshold to make a change pass.** Coverage, corpus and navigation thresholds only go up, unless a PR argues the trade explicitly ([docs/testing.md](docs/testing.md#thresholds)).
-8. **No AI attribution in commits or PRs.** No `Co-Authored-By` trailers for AI tools, no "Generated with …" lines, no session links. Hooks enforce this (see [Commits and PRs](#commits-and-prs)).
+8. **No AI attribution in commits or PRs.** No `Co-Authored-By` trailers for AI tools, no "Generated with …" lines, no session links, no AI author or committer identity. Hooks enforce this (see [Commits and PRs](#commits-and-prs)).
 
 ## Making a change
 
@@ -60,10 +60,11 @@ cargo build --release && ./target/release/rbview gen path/to/file.rs   # print o
 
 - **Branch:** `master` is the default and only long-lived branch. Never create or push `main`.
 - **Messages:** imperative subject under about 72 characters, and a body that explains *why*. Write as the repository owner. No AI attribution of any kind.
+- **Identity:** commit as the repository owner. If `git config user.email` shows an AI tool's identity (some agent environments set one globally), set the repo-local `user.name` and `user.email` first. The commit-msg hook rejects AI identities as author or committer.
 - **Guards** (all run by `scripts/check.sh`):
-  - `.githooks/commit-msg` rejects attribution in any commit. Run `scripts/setup.sh` to enable it.
+  - `.githooks/commit-msg` rejects attribution in any commit message, and commits made under an AI tool's identity. Run `scripts/setup.sh` to enable it.
   - `.claude/settings.json` turns off Claude Code's attribution, and its PreToolUse hook blocks `git commit` and `gh pr` commands containing attribution.
-  - `scripts/attribution-check.sh --range` checks every commit in a CI range.
+  - `scripts/attribution-check.sh --range` checks every commit message and identity in a CI range.
 - **Don't commit** `target/`, `node_modules/` or `.rbview/` (enforced), or scratch files.
 - **The `.vsix`** (`editors/vscode/rbview-0.1.0.vsix`) is what users install. Rebuild it whenever `extension.js`, `srcmap.js` or the extension's `package.json` change (enforced).
 - **PRs** fill in `.github/pull_request_template.md`.
