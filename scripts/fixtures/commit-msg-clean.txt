@@ -1,0 +1,3 @@
+Fix map drift
+
+The seg for multi-line literals was off by three columns.

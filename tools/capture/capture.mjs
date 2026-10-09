@@ -98,7 +98,7 @@ function lineMatches(source, activeOnly = false) {
   return waitFor(({ source, activeOnly }) => {
     const re = new RegExp(source);
     const sel = activeOnly ? '.editor-group-container.active .view-line' : '.editor-group-container .view-line';
-    return [...document.querySelectorAll(sel)].some((l) => re.test(l.textContent.replace(/ /g, ' ')));
+    return [...document.querySelectorAll(sel)].some((l) => re.test(l.textContent.replace(/\u00a0/g, ' ')));
   }, { source, activeOnly });
 }
 async function waitRustAnalyzer(timeout = 300000) {
@@ -141,7 +141,7 @@ async function tokenRect(g, word, hint = '') {
       let full = '';
       const nodes = [];
       while (walker.nextNode()) { nodes.push([walker.currentNode, full.length]); full += walker.currentNode.textContent; }
-      if (hint && !full.replace(/ /g, ' ').includes(hint)) continue;
+      if (hint && !full.replace(/\u00a0/g, ' ').includes(hint)) continue;
       const re = new RegExp(`(?<![A-Za-z0-9_])${word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![A-Za-z0-9_])`);
       const m = re.exec(full);
       if (!m) continue;

@@ -1,0 +1,46 @@
+# VS Code extension spec
+
+Source: `editors/vscode/` (`extension.js`, `srcmap.js`, `package.json`). The committed `rbview-0.1.0.vsix` must be rebuilt whenever those change, and `scripts/check.sh` verifies it is.
+
+## Documents
+
+- The Rust file `/path/x.rs` is shown as the virtual document `rbview:/path/x.rs.rb`, with language `ruby` and read-only.
+- Content comes from `rbview gen <file> --root <workspace folder> --json`. The map is kept in memory per document.
+- Saving the Rust file refreshes its open view.
+
+## Language features
+
+Every feature maps the Ruby position to Rust (`rbToRs`), runs VS Code's own provider command against the Rust document (so rust-analyzer answers), and maps the result forward (`rsRangeToRb` on the target file's view, generating it if needed):
+
+| Feature | VS Code command used |
+|---|---|
+| Go to Definition / Type Definition / Implementation / Declaration | `vscode.execute{Definition,TypeDefinition,Implementation,Declaration}Provider` |
+| Hover | `vscode.executeHoverProvider`, with contents passed through unchanged |
+| Find References | `vscode.executeReferenceProvider` |
+| Document highlights | `vscode.executeDocumentHighlights` |
+| Outline | `vscode.executeDocumentSymbolProvider` |
+
+Targets in `.rs` files open as their Ruby view. Other targets open as-is.
+
+## Commands and settings
+
+| ID | Title | Default key |
+|---|---|---|
+| `rbview.open` | rbview: Open as Ruby (cursor follows) | `Ctrl+Alt+R` / `Cmd+Alt+R` in Rust editors |
+| `rbview.showRust` | rbview: Show Rust Source | the same key in Ruby views |
+| `rbview.buildCache` | rbview: Pre-generate Ruby Views for Workspace | |
+
+| Setting | Default | |
+|---|---|---|
+| `rbview.executable` | `rbview` | path to the CLI |
+| `rbview.openBeside` | `true` | open the view beside the Rust file |
+
+## Dependencies
+
+`extensionDependencies: ["rust-lang.rust-analyzer"]`. The extension never talks to rust-analyzer directly. It only uses VS Code's provider commands, so any extension that registers Rust providers works. Demo captures use a minimal stand-in client (`tools/capture/rust-analyzer-client`).
+
+## Tests
+
+- `node editors/vscode/test/run.js`: the providers against a mock `vscode` module and a toy rust-analyzer.
+- `scripts/lsp-check.sh`: the same mapping flow against a real rust-analyzer.
+- `tools/capture/capture.sh`: the real extension in real VS Code. Every step waits for the expected UI.

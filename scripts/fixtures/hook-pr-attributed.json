@@ -1,0 +1,1 @@
+{"tool_name":"Bash","tool_input":{"command":"gh pr create --title \"Fix\" --body \"Fixes drift.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\""}}

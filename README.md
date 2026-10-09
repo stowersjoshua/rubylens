@@ -103,6 +103,8 @@ Speed, measured on tokio (555 files):
 
 ## Translation cheatsheet
 
+The highlights. The full contract, with a golden test for each rule, is [docs/spec/translation.md](docs/spec/translation.md).
+
 | Rust | Ruby view |
 |---|---|
 | `struct Foo { a: T }` | `class Foo` + `attr_accessor :a  # T` |
@@ -126,37 +128,37 @@ Speed, measured on tokio (555 files):
 
 ## Testing
 
-### Against a real rust-analyzer
+One command runs everything: `scripts/check.sh` (add `--full` for the corpus and real-rust-analyzer checks). [docs/testing.md](docs/testing.md) explains what each check protects.
 
-`editors/vscode/test/lsp-e2e.js` drives a live rust-analyzer over LSP and replays exactly what the extension does: click an identifier in the Ruby view, map it to Rust, ask rust-analyzer, map the answer into the target file's Ruby view, and check that the cursor lands on the identifier rust-analyzer meant.
+**Golden tests.** `tests/golden/` holds one small Rust file per translation area, with its expected Ruby. `cargo test` also verifies that:
+
+- every mapped identifier lands on the same Rust identifier;
+- at least 95% of Rust identifiers are reachable from the view;
+- views pass `ruby -c`;
+- every case is cited by the [translation spec](docs/spec/translation.md).
+
+**Against a real rust-analyzer** (`scripts/lsp-check.sh`, plus tokio). Every identifier in the Ruby view is clicked the way the extension would, and the landing spot is checked against what rust-analyzer meant:
 
 | Project | Definitions landing correctly | Into deps / std | References | Outline |
 |---|---|---|---|---|
-| demo crate | 190 / 190 | 0 / 32 | 27 / 27 | 28 / 28 |
-| app using regex, semver, serde_json, itertools, anyhow | 117 / 117 | 28 / 18 | 7 / 7 | 7 / 7 |
-| rbview's own source (syn, serde, sha2) | 1,313 / 1,313 | 191 / 199 | 603 / 603 | 143 / 143 |
-| tokio (4 core files, all features) | 1,596 / 1,596 | 51 / 287 | 304 / 304 | 291 / 291 |
+| demo crate | 257 / 257 | 0 / 69 | 27 / 27 | 28 / 28 |
+| app using regex, semver, serde_json, itertools, anyhow | 404 / 404 | 36 / 99 | 34 / 34 | 36 / 36 |
+| rbview's own source (syn, serde, sha2) | 1,509 / 1,509 | 196 / 303 | 559 / 559 | 153 / 153 |
+| tokio (4 core files, all features) | 974 / 974 | 24 / 231 | 304 / 304 | 291 / 291 |
 
-Hover returned rust-analyzer content for 540 of 540 sampled tokens. Tested with rust-analyzer 2026-08-17 and Rust 1.97 standard-library sources.
+Tested with rust-analyzer 2026-08-17 and Rust 1.97 standard-library sources.
 
-```sh
-node editors/vscode/test/lsp-e2e.js --ra $(which rust-analyzer) --project path/to/crate \
-  --file src/lib.rs --file src/other.rs [--all-features] [--limit 400] [--verbose]
-```
+**Corpus** (`scripts/corpus-check.py`). Across 2,789 files from 66 pinned real crates (tokio, serde, syn, clap, regex, rayon, …):
 
-### Translation, across 64 real crates (2,789 files: tokio, serde, syn, clap, regex, rayon, …)
+- no crashes, and 1 file falls back to raw source;
+- 97.8% of views are valid Ruby;
+- 2 of 2.1 million mapped identifiers point at the wrong token.
 
-- **No crashes.** 1 file fell back to showing raw source.
-- **97.8% of views are syntactically valid Ruby** (`ruby -c`).
-- **Position maps are accurate.** In 400 random files, every identifier token maps back to the right Rust token, apart from intentional renames like `len` → `size`.
+**In VS Code.** `tools/capture/capture.sh` runs the extension in VS Code 1.141 (code-server) against a real rust-analyzer, and every step waits for the expected UI. `node editors/vscode/test/run.js` tests the providers against a mock `vscode`.
 
-### In VS Code
+## Contributing
 
-`tools/capture/capture.sh` runs the extension in VS Code 1.141 (code-server) against a real rust-analyzer and clicks through the demo. Each step waits for VS Code to show the expected result: the Ruby view opening at the cursor, hover content, go-to-definition targets (including into dependencies) and Show Rust Source. A regression fails the run instead of producing a misleading GIF.
-
-### Extension plumbing
-
-`node editors/vscode/test/run.js` runs the extension's providers against a mock `vscode` module: definition, hover, references, outline and round-trips.
+Humans and AI agents follow the same guide: **[AGENTS.md](AGENTS.md)**. Start with [docs/intent.md](docs/intent.md), run `scripts/setup.sh` once, and run `scripts/check.sh` before each commit. Specs live in [docs/spec/](docs/spec/) and decision records in [docs/decisions/](docs/decisions/).
 
 ## Known limitations
 

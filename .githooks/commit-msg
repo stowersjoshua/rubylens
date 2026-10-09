@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Enabled by scripts/setup.sh (git config core.hooksPath .githooks).
+exec "$(git rev-parse --show-toplevel)/scripts/attribution-check.sh" "$1"

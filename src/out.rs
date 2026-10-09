@@ -88,11 +88,7 @@ impl Out {
         }
         let rs_line = (start.line - 1) as u32;
         let rs_col = self.col16(start);
-        let rs_len = if end.line == start.line {
-            self.col16(end).saturating_sub(rs_col)
-        } else {
-            1
-        };
+        let rs_len = if end.line == start.line { self.col16(end).saturating_sub(rs_col) } else { 1 };
         if rb_len > 0 {
             self.segs.push([rb_line, rb_col, rb_len, rs_line, rs_col, rs_len.max(1)]);
         }
@@ -144,9 +140,8 @@ impl Out {
         if from.line == 0 {
             return;
         }
-        let lines: Vec<(usize, Vec<char>)> = (from.line..=to.line)
-            .filter_map(|ln| self.src_lines.get(ln - 1).map(|c| (ln, c.clone())))
-            .collect();
+        let lines: Vec<(usize, Vec<char>)> =
+            (from.line..=to.line).filter_map(|ln| self.src_lines.get(ln - 1).map(|c| (ln, c.clone()))).collect();
         let dedent = lines
             .iter()
             .filter(|(_, c)| c.iter().any(|ch| !ch.is_whitespace()))
@@ -179,7 +174,9 @@ impl Out {
     /// Exact source text between two positions on the same line (char columns).
     pub fn src_exact(&self, a: LineColumn, b: LineColumn) -> String {
         match self.src_lines.get(a.line.wrapping_sub(1)) {
-            Some(chars) if a.line == b.line => chars[a.column.min(chars.len())..b.column.min(chars.len())].iter().collect(),
+            Some(chars) if a.line == b.line => {
+                chars[a.column.min(chars.len())..b.column.min(chars.len())].iter().collect()
+            }
             _ => self.src_text(a, b),
         }
     }

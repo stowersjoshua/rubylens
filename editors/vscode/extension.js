@@ -124,7 +124,7 @@ function locationProvider(command) {
   };
 }
 
-async function provideReferences(document, position, context) {
+async function provideReferences(document, position) {
   const { result } = await viaRust(document, position, 'vscode.executeReferenceProvider');
   if (!result) return [];
   const out = [];

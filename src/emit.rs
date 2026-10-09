@@ -12,6 +12,124 @@ use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
 use syn::*;
 
+/// Zero-argument Rust methods that vanish from the view (`.iter()`, `.clone()`, `as_*`...):
+/// in a garbage-collected, reference-free reading they carry no meaning.
+pub const DROPPED_METHODS: &[&str] = &[
+    "iter",
+    "into_iter",
+    "iter_mut",
+    "as_ref",
+    "as_mut",
+    "as_str",
+    "as_slice",
+    "as_bytes_mut",
+    "to_owned",
+    "clone",
+    "cloned",
+    "copied",
+    "borrow",
+    "borrow_mut",
+    "as_deref",
+    "as_deref_mut",
+    "by_ref",
+    "into",
+    "deref",
+    "to_vec",
+    "peekable",
+    "as_path",
+    "to_path_buf",
+    "into_owned",
+];
+
+/// Rust keyword/literal -> its Ruby counterpart in the view. Single source of truth, like
+/// [`METHOD_RENAMES`].
+pub const KEYWORD_RENAMES: &[(&str, &str)] = &[("continue", "next"), ("None", "nil")];
+
+fn keyword_word(rust: &str) -> &'static str {
+    KEYWORD_RENAMES.iter().find(|(r, _)| *r == rust).map(|(_, w)| *w).unwrap_or("")
+}
+
+/// Rust macro -> the Ruby word that stands in for it (`println!` is shown as `puts`).
+/// Single source of truth, like [`METHOD_RENAMES`].
+pub const MACRO_RENAMES: &[(&str, &str)] = &[
+    ("println", "puts"),
+    ("print", "print"),
+    ("eprintln", "warn"),
+    ("eprint", "warn"),
+    ("panic", "raise"),
+    ("unreachable", "raise"),
+    ("bail", "raise"),
+    ("todo", "raise"),
+    ("unimplemented", "raise"),
+    ("anyhow", "RuntimeError"),
+    ("assert", "assert"),
+    ("assert_eq", "assert"),
+    ("assert_ne", "assert"),
+    ("debug_assert", "assert"),
+    ("debug_assert_eq", "assert"),
+    ("debug_assert_ne", "assert"),
+    ("dbg", "p"),
+];
+
+fn macro_word(name: &str) -> &'static str {
+    MACRO_RENAMES.iter().find(|(r, _)| *r == name).map(|(_, w)| *w).unwrap_or("")
+}
+
+/// Rust method -> Ruby method name in the view. The single source of truth: the golden
+/// tests' map-accuracy check and `docs/spec/translation.md` both rely on it.
+pub const METHOD_RENAMES: &[(&str, &str)] = &[
+    ("len", "size"),
+    ("is_empty", "empty?"),
+    ("push_str", "concat"),
+    ("contains", "include?"),
+    ("contains_key", "key?"),
+    ("starts_with", "start_with?"),
+    ("ends_with", "end_with?"),
+    ("to_lowercase", "downcase"),
+    ("to_ascii_lowercase", "downcase"),
+    ("to_uppercase", "upcase"),
+    ("to_ascii_uppercase", "upcase"),
+    ("trim", "strip"),
+    ("trim_start", "lstrip"),
+    ("trim_end", "rstrip"),
+    ("filter", "select"),
+    ("any", "any?"),
+    ("all", "all?"),
+    ("position", "find_index"),
+    ("fold", "inject"),
+    ("for_each", "each"),
+    ("rev", "reverse"),
+    ("extend", "concat"),
+    ("retain", "select!"),
+    ("sort", "sort!"),
+    ("sort_unstable", "sort!"),
+    ("sort_by", "sort!"),
+    ("sort_unstable_by", "sort!"),
+    ("sort_by_key", "sort_by!"),
+    ("sort_unstable_by_key", "sort_by!"),
+    ("dedup", "uniq!"),
+    ("skip", "drop"),
+    ("skip_while", "drop_while"),
+    ("flatten", "flatten"),
+    ("last", "last"),
+    ("first", "first"),
+    ("is_ok", "ok?"),
+    ("is_err", "err?"),
+    ("min_by_key", "min_by"),
+    ("max_by_key", "max_by"),
+    ("min_by", "min"),
+    ("max_by", "max"),
+    ("chunks", "each_slice"),
+    ("windows", "each_cons"),
+    ("split_whitespace", "split"),
+    ("pop", "pop"),
+    ("remove", "delete"),
+    ("abs", "abs"),
+    ("powi", "pow"),
+    ("powf", "pow"),
+    ("pow", "pow"),
+];
+
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Kind {
     Struct,
@@ -32,21 +150,19 @@ pub struct Gen<'a> {
     deferred: Vec<Vec<(Item, String)>>,
     fn_names: Vec<String>,
     cur_params: Option<Vec<PatType>>,
+    /// token positions src_tokens leaves unmapped (see `src_tokens_except`)
+    skip_positions: Vec<LineColumn>,
 }
 
 const RUBY_KEYWORDS: &[&str] = &[
-    "alias", "and", "begin", "BEGIN", "case", "class", "def", "defined", "do", "else", "elsif", "end", "END",
-    "ensure", "module", "next", "nil", "not", "or", "redo", "rescue", "retry", "then", "undef", "unless",
-    "until", "when", "yield", "__FILE__", "__LINE__",
+    "alias", "and", "begin", "BEGIN", "case", "class", "def", "defined", "do", "else", "elsif", "end", "END", "ensure",
+    "module", "next", "nil", "not", "or", "redo", "rescue", "retry", "then", "undef", "unless", "until", "when",
+    "yield", "__FILE__", "__LINE__",
 ];
 
 pub fn rb_ident(name: &str) -> String {
     let n = name.strip_prefix("r#").unwrap_or(name);
-    if RUBY_KEYWORDS.contains(&n) {
-        format!("{n}_")
-    } else {
-        n.to_string()
-    }
+    if RUBY_KEYWORDS.contains(&n) { format!("{n}_") } else { n.to_string() }
 }
 
 pub fn camel(snake: &str) -> String {
@@ -128,7 +244,15 @@ fn pct_q_delims(text: &str) -> Option<(String, String)> {
         let mut depth = 0i32;
         let mut ok = true;
         for c in text.chars() {
-            if c == open { depth += 1 } else if c == close { depth -= 1; if depth < 0 { ok = false; break; } }
+            if c == open {
+                depth += 1
+            } else if c == close {
+                depth -= 1;
+                if depth < 0 {
+                    ok = false;
+                    break;
+                }
+            }
         }
         if ok && depth == 0 {
             return Some((format!("%q{open}"), close.to_string()));
@@ -145,7 +269,15 @@ fn pct_q(text: &str) -> String {
         let mut depth = 0i32;
         let mut ok = true;
         for c in text.chars() {
-            if c == open { depth += 1 } else if c == close { depth -= 1; if depth < 0 { ok = false; break; } }
+            if c == open {
+                depth += 1
+            } else if c == close {
+                depth -= 1;
+                if depth < 0 {
+                    ok = false;
+                    break;
+                }
+            }
         }
         if ok && depth == 0 && !text.contains('\\') {
             return format!("%q{open}{text}{close}");
@@ -179,7 +311,17 @@ fn escape_rb(s: &str) -> String {
 
 impl<'a> Gen<'a> {
     pub fn new(src: &str, kinds: &'a HashMap<String, Kind>) -> Self {
-        Gen { out: Out::new(src), kinds, local_kinds: HashMap::new(), self_ty: None, in_module: false, deferred: vec![], fn_names: vec![], cur_params: None }
+        Gen {
+            out: Out::new(src),
+            kinds,
+            local_kinds: HashMap::new(),
+            self_ty: None,
+            in_module: false,
+            deferred: vec![],
+            fn_names: vec![],
+            cur_params: None,
+            skip_positions: vec![],
+        }
     }
 
     fn kind_of(&self, name: &str) -> Option<Kind> {
@@ -191,6 +333,12 @@ impl<'a> Gen<'a> {
     fn ident(&mut self, id: &Ident) {
         let s = rb_ident(&id.to_string());
         self.span_tok(&s, id.span());
+    }
+
+    /// A field/method name: Ruby keywords are fine here (`:end`, `r.end`), only locals need `end_`.
+    fn field_name(&mut self, id: &Ident) {
+        let s = id.to_string();
+        self.span_tok(s.trim_start_matches("r#"), id.span());
     }
 
     fn span_tok(&mut self, s: &str, sp: Span) {
@@ -209,6 +357,84 @@ impl<'a> Gen<'a> {
             Some((a, b)) => self.out.src_text(a, b),
             None => node.to_token_stream().to_string(),
         }
+    }
+
+    /// Rust source of `node` on one line, re-spaced as written, with every token mapped to its
+    /// own Rust span (so each type in a signature comment is clickable).
+    fn src_tokens<T: ToTokens + ?Sized>(&mut self, node: &T) {
+        self.src_tokens_except(node, &[]);
+    }
+
+    /// Like [`Self::src_tokens`], but tokens starting at `skip` positions are left unmapped:
+    /// they're mapped on the code line (e.g. the fn name in `def name`), which must win.
+    fn src_tokens_except<T: ToTokens + ?Sized>(&mut self, node: &T, skip: &[LineColumn]) {
+        let mut prev = None;
+        let saved = std::mem::replace(&mut self.skip_positions, skip.to_vec());
+        self.tokens_rec(node.to_token_stream(), &mut prev);
+        self.skip_positions = saved;
+    }
+
+    fn tokens_rec(&mut self, ts: TokenStream, prev: &mut Option<LineColumn>) {
+        for tt in ts {
+            match tt {
+                TokenTree::Group(g) => {
+                    let (open, close) = match g.delimiter() {
+                        proc_macro2::Delimiter::Parenthesis => ("(", ")"),
+                        proc_macro2::Delimiter::Brace => ("{", "}"),
+                        proc_macro2::Delimiter::Bracket => ("[", "]"),
+                        proc_macro2::Delimiter::None => ("", ""),
+                    };
+                    if open.is_empty() {
+                        self.tokens_rec(g.stream(), prev);
+                        continue;
+                    }
+                    self.tok_spaced(open, g.span_open(), prev);
+                    self.tokens_rec(g.stream(), prev);
+                    self.tok_spaced(close, g.span_close(), prev);
+                }
+                leaf => {
+                    let (a, b) = (leaf.span().start(), leaf.span().end());
+                    let text =
+                        if a.line != 0 && a.line == b.line { self.out.src_exact(a, b) } else { leaf.to_string() };
+                    self.tok_spaced(&text, leaf.span(), prev);
+                }
+            }
+        }
+    }
+
+    fn tok_spaced(&mut self, text: &str, sp: Span, prev: &mut Option<LineColumn>) {
+        let (a, b) = (sp.start(), sp.end());
+        // comments are single lines: a multi-line literal must not break out of one
+        let flat;
+        let text = if text.contains('\n') {
+            flat = text.split_whitespace().collect::<Vec<_>>().join(" ");
+            flat.as_str()
+        } else {
+            text
+        };
+        if self.skip_positions.contains(&a) {
+            if prev.is_some_and(|p| a.line != p.line || a.column > p.column) {
+                self.out.push(" ");
+            }
+            self.out.push(text);
+            *prev = Some(b);
+            return;
+        }
+        if a.line == 0 {
+            // synthesized token without a source position
+            if prev.is_some() {
+                self.out.push(" ");
+            }
+            self.out.push(text);
+            return;
+        }
+        if let Some(p) = prev
+            && (a.line != p.line || a.column > p.column)
+        {
+            self.out.push(" ");
+        }
+        self.out.tok(text, a, b);
+        *prev = Some(b);
     }
 
     /// Raw Rust kept verbatim for constructs we don't translate.
@@ -243,10 +469,10 @@ impl<'a> Gen<'a> {
         let mut doc = vec![];
         for a in attrs {
             if a.path().is_ident("doc") {
-                if let Meta::NameValue(nv) = &a.meta {
-                    if let Expr::Lit(ExprLit { lit: Lit::Str(s), .. }) = &nv.value {
-                        doc.push(s.value());
-                    }
+                if let Meta::NameValue(nv) = &a.meta
+                    && let Expr::Lit(ExprLit { lit: Lit::Str(s), .. }) = &nv.value
+                {
+                    doc.push(s.value());
                 }
             } else {
                 if !doc.is_empty() {
@@ -254,10 +480,9 @@ impl<'a> Gen<'a> {
                     self.out.comment(&text.join("\n"));
                     doc.clear();
                 }
-                let text = self.src_of(a);
                 self.out.nl();
                 self.out.push("# ");
-                self.node_tok(&text, a);
+                self.src_tokens(a);
                 self.out.nl();
             }
         }
@@ -372,8 +597,7 @@ impl<'a> Gen<'a> {
                 self.out.push(" = ");
                 self.expr(&c.expr);
                 self.out.push("  # ");
-                let t = self.src_of(&c.ty);
-                self.node_tok(&t, &c.ty);
+                self.src_tokens(&c.ty);
             }
             Item::Static(s) => {
                 self.attrs(&s.attrs);
@@ -381,8 +605,7 @@ impl<'a> Gen<'a> {
                 self.out.push(" = ");
                 self.expr(&s.expr);
                 self.out.push("  # static ");
-                let t = self.src_of(&s.ty);
-                self.node_tok(&t, &s.ty);
+                self.src_tokens(&s.ty);
             }
             Item::Type(t) => {
                 self.attrs(&t.attrs);
@@ -390,8 +613,7 @@ impl<'a> Gen<'a> {
                 self.out.push(" = ");
                 self.type_const(&t.ty);
                 self.out.push("  # type alias: ");
-                let s = self.src_of(&t.ty);
-                self.node_tok(&s, &t.ty);
+                self.src_tokens(&t.ty);
             }
             Item::Macro(m) => {
                 self.attrs(&m.attrs);
@@ -453,10 +675,17 @@ impl<'a> Gen<'a> {
 
     /// `def name(params)` with the original Rust signature as a comment above it.
     fn fn_def(&mut self, sig: &Signature, body: Option<&Block>, force_self: bool) {
-        let sig_text = self.src_of(sig);
+        let mut skip = vec![sig.ident.span().start()];
+        for arg in &sig.inputs {
+            if let FnArg::Typed(t) = arg
+                && let Pat::Ident(pi) = &*t.pat
+            {
+                skip.push(pi.ident.span().start());
+            }
+        }
         self.out.nl();
         self.out.push("# ");
-        self.node_tok(&sig_text, sig);
+        self.src_tokens_except(sig, &skip);
         self.out.nl();
 
         let has_receiver = matches!(sig.inputs.first(), Some(FnArg::Receiver(_)));
@@ -484,6 +713,7 @@ impl<'a> Gen<'a> {
                 }
                 match &*p.pat {
                     Pat::Ident(pi) => self.ident(&pi.ident),
+                    Pat::Wild(w) => self.node_tok("_", w),
                     _ => {
                         // destructuring param: Ruby can't, show as raw name
                         self.node_tok(&format!("arg{i}"), &p.pat);
@@ -509,7 +739,7 @@ impl<'a> Gen<'a> {
                 self.out.indent += 1;
                 // destructuring params become pattern matches at the top of the body
                 for (i, p) in params.iter().enumerate() {
-                    if !matches!(&*p.pat, Pat::Ident(_)) {
+                    if !matches!(&*p.pat, Pat::Ident(_) | Pat::Wild(_)) {
                         self.out.nl();
                         self.out.push(&format!("arg{i} => "));
                         self.pat(&p.pat);
@@ -538,14 +768,13 @@ impl<'a> Gen<'a> {
 
     fn generics_comment(&mut self, g: &Generics) {
         if !g.params.is_empty() || g.where_clause.is_some() {
-            let mut s = self.src_of(&g.params);
-            if let Some(w) = &g.where_clause {
-                s.push(' ');
-                s.push_str(&self.src_of(w));
-            }
             self.out.push("  # <");
-            self.node_tok(&s, g);
+            self.src_tokens(&g.params);
             self.out.push(">");
+            if let Some(w) = &g.where_clause {
+                self.out.push(" ");
+                self.src_tokens(w);
+            }
         }
     }
 
@@ -569,10 +798,9 @@ impl<'a> Gen<'a> {
                     self.out.nl();
                     self.attrs(&f.attrs);
                     self.out.push("attr_accessor :");
-                    self.ident(f.ident.as_ref().unwrap());
+                    self.field_name(f.ident.as_ref().unwrap());
                     self.out.push("  # ");
-                    let t = self.src_of(&f.ty);
-                    self.node_tok(&t, &f.ty);
+                    self.src_tokens(&f.ty);
                 }
                 self.out.indent -= 1;
             }
@@ -585,8 +813,7 @@ impl<'a> Gen<'a> {
                         self.out.push(&format!(", self[{i}]"));
                     }
                     self.out.push(": ");
-                    let t = self.src_of(&f.ty);
-                    self.node_tok(&t, &f.ty);
+                    self.src_tokens(&f.ty);
                 }
                 self.out.indent -= 1;
             }
@@ -617,7 +844,7 @@ impl<'a> Gen<'a> {
                             self.out.push(", ");
                         }
                         self.out.push(":");
-                        self.ident(f.ident.as_ref().unwrap());
+                        self.field_name(f.ident.as_ref().unwrap());
                     }
                     self.out.push(")");
                 }
@@ -635,13 +862,14 @@ impl<'a> Gen<'a> {
             self.out.push(&format!(" {{ include {enum_name} }}"));
             if !matches!(v.fields, Fields::Unit) {
                 self.out.push("  # ");
-                let t = self.src_of(&v.fields);
-                self.node_tok(&t, &v.fields);
+                // field names are mapped on `Data.define(:name)`; the comment only adds types
+                let skip: Vec<LineColumn> =
+                    v.fields.iter().filter_map(|f| f.ident.as_ref().map(|i| i.span().start())).collect();
+                self.src_tokens_except(&v.fields, &skip);
             }
             if let Some((_, d)) = &v.discriminant {
                 self.out.push(if matches!(v.fields, Fields::Unit) { "  # = " } else { " = " });
-                let t = self.src_of(d);
-                self.node_tok(&t, d);
+                self.src_tokens(d);
             }
         }
         self.out.indent -= 1;
@@ -656,14 +884,17 @@ impl<'a> Gen<'a> {
         self.out.push("  # trait");
         if !t.supertraits.is_empty() {
             self.out.push(": ");
-            let s = self.src_of(&t.supertraits);
-            self.node_tok(&s, &t.supertraits);
+            self.src_tokens(&t.supertraits);
         }
         self.generics_comment(&t.generics);
         self.out.indent += 1;
         let prev = self.self_ty.replace(t.ident.to_string());
         for (idx, it) in t.items.iter().enumerate() {
-            if idx > 0 { self.out.blank(); } else { self.out.nl(); }
+            if idx > 0 {
+                self.out.blank();
+            } else {
+                self.out.nl();
+            }
             let rb_start = self.out.line;
             match it {
                 TraitItem::Fn(f) => {
@@ -676,8 +907,7 @@ impl<'a> Gen<'a> {
                     self.ident(&ty.ident);
                     if !ty.bounds.is_empty() {
                         self.out.push(": ");
-                        let s = self.src_of(&ty.bounds);
-                        self.node_tok(&s, &ty.bounds);
+                        self.src_tokens(&ty.bounds);
                     }
                 }
                 TraitItem::Const(c) => {
@@ -688,11 +918,12 @@ impl<'a> Gen<'a> {
                         Some((_, e)) => self.expr(e),
                         None => self.out.push("nil  # required"),
                     }
+                    self.out.push("  # ");
+                    self.src_tokens(&c.ty);
                 }
                 other => {
                     self.out.push("# ");
-                    let s = self.src_of(other);
-                    self.node_tok(&s, other);
+                    self.src_tokens(other);
                 }
             }
             self.out.nl();
@@ -744,19 +975,25 @@ impl<'a> Gen<'a> {
         self.out.push(kw);
         self.out.push(" ");
         self.type_const(&i.self_ty);
-        let header = format!(
-            "impl{} {}{}",
-            if i.generics.params.is_empty() { String::new() } else { format!("<{}>", self.src_of(&i.generics.params)) },
-            match &i.trait_ {
-                Some((_, p, _)) => format!("{} for ", self.src_of(p)),
-                None => String::new(),
-            },
-            self.src_of(&i.self_ty)
-        );
         self.out.push("  # ");
-        match tok_range(&i.self_ty) {
-            Some((a, b)) => self.out.tok(&header, a, b),
-            None => self.out.push(&header),
+        self.node_tok("impl", &i.impl_token);
+        if !i.generics.params.is_empty() {
+            self.out.push("<");
+            self.src_tokens(&i.generics.params);
+            self.out.push(">");
+        }
+        self.out.push(" ");
+        if let Some((bang, p, _)) = &i.trait_ {
+            if bang.is_some() {
+                self.out.push("!");
+            }
+            self.src_tokens(p);
+            self.out.push(" for ");
+        }
+        self.src_tokens(&i.self_ty);
+        if let Some(w) = &i.generics.where_clause {
+            self.out.push(" ");
+            self.src_tokens(w);
         }
         self.out.indent += 1;
         if let Some((neg, p, _)) = &i.trait_ {
@@ -766,7 +1003,11 @@ impl<'a> Gen<'a> {
         }
         let prev = self.self_ty.replace(name);
         for (idx, it) in i.items.iter().enumerate() {
-            if idx > 0 || i.trait_.is_some() { self.out.blank(); } else { self.out.nl(); }
+            if idx > 0 || i.trait_.is_some() {
+                self.out.blank();
+            } else {
+                self.out.nl();
+            }
             let rb_start = self.out.line;
             self.impl_item(it);
             self.out.nl();
@@ -789,14 +1030,15 @@ impl<'a> Gen<'a> {
                 self.ident(&c.ident);
                 self.out.push(" = ");
                 self.expr(&c.expr);
+                self.out.push("  # ");
+                self.src_tokens(&c.ty);
             }
             ImplItem::Type(t) => {
                 self.attrs(&t.attrs);
                 self.out.push("# type ");
                 self.ident(&t.ident);
                 self.out.push(" = ");
-                let s = self.src_of(&t.ty);
-                self.node_tok(&s, &t.ty);
+                self.src_tokens(&t.ty);
             }
             ImplItem::Macro(m) => {
                 self.attrs(&m.attrs);
@@ -814,7 +1056,11 @@ impl<'a> Gen<'a> {
                         self.out.push("# ");
                         self.node_tok(&format!("{path}! {{"), &m.mac.path);
                         for (i, sub) in items.iter().enumerate() {
-                            if i > 0 { self.out.blank(); } else { self.out.nl(); }
+                            if i > 0 {
+                                self.out.blank();
+                            } else {
+                                self.out.nl();
+                            }
                             let rb_start = self.out.line;
                             self.impl_item(sub);
                             self.out.nl();
@@ -881,7 +1127,8 @@ impl<'a> Gen<'a> {
         match s {
             Stmt::Local(l) => self.local(l),
             Stmt::Item(it) => {
-                let keep_in_place = matches!(it, Item::Use(_)) || matches!(it, Item::Macro(m) if m.mac.path.is_ident("macro_rules"));
+                let keep_in_place =
+                    matches!(it, Item::Use(_)) || matches!(it, Item::Macro(m) if m.mac.path.is_ident("macro_rules"));
                 if keep_in_place || self.deferred.is_empty() {
                     return self.item(it);
                 }
@@ -908,10 +1155,11 @@ impl<'a> Gen<'a> {
     }
 
     fn some_inner(p: &Pat) -> Option<&Pat> {
-        if let Pat::TupleStruct(ts) = p {
-            if ts.path.is_ident("Some") && ts.elems.len() == 1 {
-                return ts.elems.first();
-            }
+        if let Pat::TupleStruct(ts) = p
+            && ts.path.is_ident("Some")
+            && ts.elems.len() == 1
+        {
+            return ts.elems.first();
         }
         None
     }
@@ -1021,8 +1269,7 @@ impl<'a> Gen<'a> {
         }
         if let Some(ty) = ty_comment {
             self.out.push("  # ");
-            let s = self.src_of(&ty);
-            self.node_tok(&s, &ty);
+            self.src_tokens(&ty);
         }
     }
 
@@ -1030,7 +1277,9 @@ impl<'a> Gen<'a> {
 
     fn pat(&mut self, p: &Pat) {
         match p {
-            Pat::Ident(pi) if pi.ident == "None" && pi.subpat.is_none() => self.span_tok("nil", pi.ident.span()),
+            Pat::Ident(pi) if pi.ident == "None" && pi.subpat.is_none() => {
+                self.span_tok(keyword_word("None"), pi.ident.span())
+            }
             Pat::Ident(pi) => {
                 if let Some((_, sub)) = &pi.subpat {
                     self.pat(sub);
@@ -1080,7 +1329,7 @@ impl<'a> Gen<'a> {
             }
             Pat::Path(pp) => {
                 if pp.path.is_ident("None") {
-                    self.span_tok("nil", pp.path.span());
+                    self.span_tok(keyword_word("None"), pp.path.span());
                 } else {
                     self.path_const(&pp.path);
                 }
@@ -1108,9 +1357,18 @@ impl<'a> Gen<'a> {
                                 self.out.push(": ");
                                 self.pat(&f.pat);
                             } else {
-                                // shorthand `{ a }` binds `a`
-                                self.ident(id);
-                                self.out.push(":");
+                                // shorthand `{ a }` binds `a`; a Ruby keyword can't be a local,
+                                // so `{ end }` binds explicitly: `end: end_`
+                                let raw = id.to_string();
+                                let raw = raw.trim_start_matches("r#");
+                                if rb_ident(raw) == raw {
+                                    self.ident(id);
+                                    self.out.push(":");
+                                } else {
+                                    self.field_name(id);
+                                    self.out.push(": ");
+                                    self.ident(id);
+                                }
                             }
                         }
                         Member::Unnamed(idx) => {
@@ -1135,9 +1393,22 @@ impl<'a> Gen<'a> {
                 };
                 if num(&r.start).is_some() || num(&r.end).is_some() {
                     self.out.push("(");
-                    if let Some(x) = &r.start { match num(&r.start) { Some(n) => self.node_tok(&n, x), None => self.expr(x) } }
-                    self.out.push(match r.limits { RangeLimits::HalfOpen(_) => "...", RangeLimits::Closed(_) => ".." });
-                    if let Some(x) = &r.end { match num(&r.end) { Some(n) => self.node_tok(&n, x), None => self.expr(x) } }
+                    if let Some(x) = &r.start {
+                        match num(&r.start) {
+                            Some(n) => self.node_tok(&n, x),
+                            None => self.expr(x),
+                        }
+                    }
+                    self.out.push(match r.limits {
+                        RangeLimits::HalfOpen(_) => "...",
+                        RangeLimits::Closed(_) => "..",
+                    });
+                    if let Some(x) = &r.end {
+                        match num(&r.end) {
+                            Some(n) => self.node_tok(&n, x),
+                            None => self.expr(x),
+                        }
+                    }
                     self.out.push(")");
                 } else {
                     self.range(r)
@@ -1263,7 +1534,7 @@ impl<'a> Gen<'a> {
         if segs.len() == 1 {
             let s = segs[0].ident.to_string();
             match s.as_str() {
-                "None" => return self.span_tok("nil", segs[0].ident.span()),
+                "None" => return self.span_tok(keyword_word("None"), segs[0].ident.span()),
                 "self" => return self.span_tok("self", segs[0].ident.span()),
                 "Self" => {
                     let n = self.self_ty.clone().unwrap_or_else(|| "self.class".into());
@@ -1279,7 +1550,8 @@ impl<'a> Gen<'a> {
         let mut prefix = path.clone();
         prefix.segments.pop();
         // drop trailing punct
-        let prefix_path = Path { leading_colon: None, segments: prefix.segments.into_pairs().map(|p| p.into_value()).collect() };
+        let prefix_path =
+            Path { leading_colon: None, segments: prefix.segments.into_pairs().map(|p| p.into_value()).collect() };
         self.path_const(&prefix_path);
         if is_capitalized(&last_s) || is_const_case(&last_s) {
             self.out.push("::");
@@ -1396,7 +1668,7 @@ impl<'a> Gen<'a> {
                 "String::new" | "String::with_capacity" => return self.node_tok("\"\"", &c.func),
                 "Vec::new" | "Vec::with_capacity" | "VecDeque::new" => return self.node_tok("[]", &c.func),
                 "HashMap::new" | "BTreeMap::new" | "HashMap::with_capacity" | "IndexMap::new" => {
-                    return self.node_tok("{}", &c.func)
+                    return self.node_tok("{}", &c.func);
                 }
                 "HashSet::new" | "BTreeSet::new" => return self.node_tok("Set.new", &c.func),
                 "Default::default" => return self.node_tok("default", &c.func),
@@ -1441,14 +1713,8 @@ impl<'a> Gen<'a> {
     fn method_call(&mut self, m: &ExprMethodCall) {
         let name = m.method.to_string();
         let argc = m.args.len();
-        // methods that vanish in a GC'd, reference-free view
-        const DROP: &[&str] = &[
-            "iter", "into_iter", "iter_mut", "as_ref", "as_mut", "as_str", "as_slice", "as_bytes_mut", "to_owned",
-            "clone", "cloned", "copied", "borrow", "borrow_mut", "as_deref", "as_deref_mut", "by_ref", "into", "deref",
-            "to_vec", "peekable", "as_path", "to_path_buf", "into_owned",
-        ];
-        if argc == 0 && DROP.contains(&name.as_str()) {
-            return self.expr(&m.receiver);  // whole expression
+        if argc == 0 && DROPPED_METHODS.contains(&name.as_str()) {
+            return self.expr(&m.receiver); // whole expression
         }
         match (name.as_str(), argc) {
             ("is_some", 0) => {
@@ -1495,12 +1761,26 @@ impl<'a> Gen<'a> {
             ("collect", 0) => {
                 let target = m.turbofish.as_ref().map(|t| t.to_token_stream().to_string()).unwrap_or_default();
                 self.expr_recv(&m.receiver);
-                if target.contains("Map") {
-                    self.span_tok(".to_h", m.method.span());
+                // `.collect::<HashMap<..>>()` -> `.to_h`, mapped over the method *and* its turbofish
+                let start = m.method.span().start();
+                let end = m
+                    .turbofish
+                    .as_ref()
+                    .and_then(tok_range)
+                    .filter(|(a, _)| a.line == start.line)
+                    .map(|(_, b)| b)
+                    .unwrap_or(m.method.span().end());
+                let conv = if target.contains("Map") {
+                    ".to_h"
                 } else if target.contains("Set") {
-                    self.span_tok(".to_set", m.method.span());
+                    ".to_set"
                 } else if target.contains("String") {
-                    self.span_tok(".join", m.method.span());
+                    ".join"
+                } else {
+                    ""
+                };
+                if !conv.is_empty() {
+                    self.out.tok(conv, start, end);
                 }
                 return;
             }
@@ -1511,52 +1791,7 @@ impl<'a> Gen<'a> {
             }
             _ => {}
         }
-        let rb = match name.as_str() {
-            "len" => "size",
-            "is_empty" => "empty?",
-            "push_str" => "concat",
-            "contains" => "include?",
-            "contains_key" => "key?",
-            "starts_with" => "start_with?",
-            "ends_with" => "end_with?",
-            "to_lowercase" | "to_ascii_lowercase" => "downcase",
-            "to_uppercase" | "to_ascii_uppercase" => "upcase",
-            "trim" => "strip",
-            "trim_start" => "lstrip",
-            "trim_end" => "rstrip",
-            "filter" => "select",
-            "any" => "any?",
-            "all" => "all?",
-            "position" => "find_index",
-            "fold" => "inject",
-            "for_each" => "each",
-            "rev" => "reverse",
-            "extend" => "concat",
-            "retain" => "select!",
-            "sort" | "sort_unstable" => "sort!",
-            "sort_by" | "sort_unstable_by" => "sort!",
-            "sort_by_key" | "sort_unstable_by_key" => "sort_by!",
-            "dedup" => "uniq!",
-            "skip" => "drop",
-            "skip_while" => "drop_while",
-            "flatten" => "flatten",
-            "last" => "last",
-            "first" => "first",
-            "is_ok" => "ok?",
-            "is_err" => "err?",
-            "min_by_key" => "min_by",
-            "max_by_key" => "max_by",
-            "min_by" => "min",
-            "max_by" => "max",
-            "chunks" => "each_slice",
-            "windows" => "each_cons",
-            "split_whitespace" => "split",
-            "pop" => "pop",
-            "remove" => "delete",
-            "abs" => "abs",
-            "powi" | "powf" | "pow" => "pow",
-            _ => "",
-        };
+        let rb = METHOD_RENAMES.iter().find(|(r, _)| *r == name).map(|(_, rb)| *rb).unwrap_or("");
         let rb = if rb.is_empty() { name.strip_prefix("r#").unwrap_or(&name).to_string() } else { rb.to_string() };
         self.expr_recv(&m.receiver);
         self.out.push(".");
@@ -1592,16 +1827,18 @@ impl<'a> Gen<'a> {
                 let compound = op.len() >= 2 && op.ends_with('=') && !["==", "!=", "<=", ">="].contains(&op.as_str());
                 if compound {
                     let target = Self::strip_deref(&b.left);
-                    if let Some((map, key, default)) = Self::entry_or_insert(target) {
+                    if let Some((map, key, default, entry_id, or_id)) = Self::entry_or_insert(target) {
                         // *map.entry(k).or_insert(v) += x   =>   map[k] = (map[k] || v) + x
                         self.expr_recv(map);
-                        self.out.push("[");
+                        self.span_tok("[", entry_id.span());
                         self.expr(key);
                         self.out.push("] = (");
                         self.expr_recv(map);
                         self.out.push("[");
                         self.expr(key);
-                        self.out.push("] || ");
+                        self.out.push("] ");
+                        self.span_tok("||", or_id.span());
+                        self.out.push(" ");
                         match default {
                             Some(d) => self.expr(d),
                             None => self.out.push("default"),
@@ -1646,7 +1883,12 @@ impl<'a> Gen<'a> {
             Expr::Assign(a) => {
                 let target = Self::strip_deref(&a.left);
                 let is_self = matches!(target, Expr::Path(p) if p.path.is_ident("self"));
-                if is_self || !matches!(target, Expr::Path(_) | Expr::Field(_) | Expr::Index(_) | Expr::Tuple(_) | Expr::Infer(_)) {
+                if is_self
+                    || !matches!(
+                        target,
+                        Expr::Path(_) | Expr::Field(_) | Expr::Index(_) | Expr::Tuple(_) | Expr::Infer(_)
+                    )
+                {
                     // `*self = x` / `*ptr() = x`: show as an in-place replace
                     self.expr_recv(target);
                     self.out.push(".");
@@ -1665,9 +1907,8 @@ impl<'a> Gen<'a> {
                 self.expr_recv(&c.expr);
                 let conv = match ty.as_str() {
                     "f32" | "f64" => ".to_f",
-                    "i8" | "i16" | "i32" | "i64" | "i128" | "isize" | "u8" | "u16" | "u32" | "u64" | "u128" | "usize" => {
-                        ".to_i"
-                    }
+                    "i8" | "i16" | "i32" | "i64" | "i128" | "isize" | "u8" | "u16" | "u32" | "u64" | "u128"
+                    | "usize" => ".to_i",
                     "char" => ".chr",
                     _ => "",
                 };
@@ -1685,7 +1926,7 @@ impl<'a> Gen<'a> {
                         } else {
                             self.expr_recv(&f.base);
                             self.out.push(".");
-                            self.span_tok(&id.to_string().trim_start_matches("r#").to_string(), id.span());
+                            self.span_tok(id.to_string().trim_start_matches("r#"), id.span());
                         }
                     }
                     Member::Unnamed(idx) => {
@@ -1708,7 +1949,7 @@ impl<'a> Gen<'a> {
             Expr::Closure(c) => self.lambda(c),
             Expr::Try(t) => {
                 self.expr_recv(&t.expr);
-                self.node_tok(".try!", t);
+                self.span_tok(".try!", t.question_token.span);
             }
             Expr::Await(a) => {
                 self.expr_recv(&a.base);
@@ -1754,7 +1995,7 @@ impl<'a> Gen<'a> {
                         self.out.push(", ");
                     }
                     match &f.member {
-                        Member::Named(id) => self.span_tok(&id.to_string().trim_start_matches("r#").to_string(), id.span()),
+                        Member::Named(id) => self.span_tok(id.to_string().trim_start_matches("r#"), id.span()),
                         Member::Unnamed(idx) => self.span_tok(&format!("_{}", idx.index), idx.span),
                     }
                     self.out.push(": ");
@@ -1771,14 +2012,14 @@ impl<'a> Gen<'a> {
                 self.out.push("]");
             }
             Expr::Return(r) => {
-                self.node_tok("return", r);
+                self.span_tok("return", r.return_token.span);
                 if let Some(x) = &r.expr {
                     self.out.push(" ");
                     self.expr(x);
                 }
             }
             Expr::Break(b) => {
-                self.node_tok("break", b);
+                self.span_tok("break", b.break_token.span);
                 if let Some(x) = &b.expr {
                     self.out.push(" ");
                     self.expr(x);
@@ -1788,7 +2029,7 @@ impl<'a> Gen<'a> {
                 }
             }
             Expr::Continue(c) => {
-                self.node_tok("next", c);
+                self.span_tok(keyword_word("continue"), c.continue_token.span);
                 if let Some(l) = &c.label {
                     self.out.push(&format!("  # continue {}", l.to_token_stream()));
                 }
@@ -1886,8 +2127,8 @@ impl<'a> Gen<'a> {
         }
     }
 
-    /// `map.entry(k).or_insert(v)` / `.or_default()` / `.or_insert_with(f)` -> (map, k, default)
-    fn entry_or_insert(e: &Expr) -> Option<(&Expr, &Expr, Option<&Expr>)> {
+    /// `map.entry(k).or_insert(v)` / `.or_default()` / `.or_insert_with(f)` -> (map, k, default, entry, or_insert)
+    fn entry_or_insert(e: &Expr) -> Option<(&Expr, &Expr, Option<&Expr>, &Ident, &Ident)> {
         let Expr::MethodCall(outer) = e else { return None };
         let m = outer.method.to_string();
         if !matches!(m.as_str(), "or_insert" | "or_default" | "or_insert_with") {
@@ -1897,19 +2138,43 @@ impl<'a> Gen<'a> {
         if entry.method != "entry" || entry.args.len() != 1 {
             return None;
         }
-        Some((&entry.receiver, &entry.args[0], if m == "or_insert" { outer.args.first() } else { None }))
+        Some((
+            &entry.receiver,
+            &entry.args[0],
+            if m == "or_insert" { outer.args.first() } else { None },
+            &entry.method,
+            &outer.method,
+        ))
     }
 
     /// Would this expression's Ruby rendering need parentheses when used as a receiver?
     fn needs_parens(e: &Expr) -> bool {
         match e {
-            Expr::Binary(_) | Expr::Assign(_) | Expr::Range(_) | Expr::Closure(_) | Expr::Let(_) | Expr::Unary(ExprUnary { op: UnOp::Not(_) | UnOp::Neg(_), .. }) => true,
+            Expr::Binary(_)
+            | Expr::Assign(_)
+            | Expr::Range(_)
+            | Expr::Closure(_)
+            | Expr::Let(_)
+            | Expr::Unary(ExprUnary { op: UnOp::Not(_) | UnOp::Neg(_), .. }) => true,
             Expr::Unary(u) => Self::needs_parens(&u.expr),
             Expr::Reference(r) => Self::needs_parens(&r.expr),
             Expr::Group(g) => Self::needs_parens(&g.expr),
             Expr::Macro(m) => {
                 let n = m.mac.path.segments.last().map(|s| s.ident.to_string()).unwrap_or_default();
-                matches!(n.as_str(), "write" | "writeln" | "matches" | "assert" | "assert_eq" | "assert_ne" | "println" | "print" | "eprintln" | "eprint" | "panic")
+                matches!(
+                    n.as_str(),
+                    "write"
+                        | "writeln"
+                        | "matches"
+                        | "assert"
+                        | "assert_eq"
+                        | "assert_ne"
+                        | "println"
+                        | "print"
+                        | "eprintln"
+                        | "eprint"
+                        | "panic"
+                )
             }
             Expr::MethodCall(m) => m.args.is_empty() && m.method == "is_some",
             Expr::If(_) | Expr::Match(_) | Expr::Loop(_) | Expr::While(_) | Expr::ForLoop(_) => true,
@@ -2047,16 +2312,14 @@ impl<'a> Gen<'a> {
                     target = it.next();
                 }
                 let rest: Vec<&Expr> = it.collect();
+                let word = macro_word(&name);
                 let kw = match name.as_str() {
-                    "println" => "puts ",
-                    "print" => "print ",
-                    "eprintln" | "eprint" => "warn ",
-                    "format" | "format_args" => "",
-                    "panic" | "unreachable" | "bail" => "raise ",
-                    "anyhow" => "RuntimeError.new(",
-                    "todo" | "unimplemented" => "raise NotImplementedError",
-                    _ => "",
+                    "format" | "format_args" | "write" | "writeln" => String::new(),
+                    "anyhow" => format!("{word}.new("),
+                    "todo" | "unimplemented" => format!("{word} NotImplementedError"),
+                    _ => format!("{word} "),
                 };
+                let kw = kw.as_str();
                 if let Some(t) = target {
                     self.expr(t);
                     self.span_tok(" << ", span);
@@ -2078,7 +2341,8 @@ impl<'a> Gen<'a> {
                         self.out.push(" \"unreachable\"");
                     }
                 } else {
-                    self.format_string(&rest, name == "writeln");
+                    let open = matches!(name.as_str(), "format" | "format_args").then(|| span);
+                    self.format_string(&rest, name == "writeln", open);
                 }
                 if name == "anyhow" {
                     self.out.push(")");
@@ -2114,7 +2378,7 @@ impl<'a> Gen<'a> {
             "assert" | "debug_assert" | "assert_eq" | "debug_assert_eq" | "assert_ne" | "debug_assert_ne" => {
                 let Some(args) = parse_args() else { return self.raw_macro(mac) };
                 let a: Vec<&Expr> = args.iter().collect();
-                self.span_tok("assert", span);
+                self.span_tok(macro_word(&name), span);
                 self.out.push(" ");
                 if a.is_empty() {
                     return;
@@ -2130,7 +2394,7 @@ impl<'a> Gen<'a> {
                 }
                 if a.len() > extra {
                     self.out.push(", ");
-                    self.format_string(&a[extra..], false);
+                    self.format_string(&a[extra..], false, None);
                 }
             }
             "matches" => {
@@ -2164,7 +2428,7 @@ impl<'a> Gen<'a> {
             }
             "dbg" => {
                 let Some(args) = parse_args() else { return self.raw_macro(mac) };
-                self.span_tok("p", span);
+                self.span_tok(macro_word("dbg"), span);
                 self.out.push("(");
                 for (i, a) in args.iter().enumerate() {
                     if i > 0 {
@@ -2196,9 +2460,29 @@ impl<'a> Gen<'a> {
     /// A macro invocation on its own line (item or statement position).
     fn macro_stmt(&mut self, mac: &Macro) {
         const KNOWN: &[&str] = &[
-            "println", "print", "eprintln", "eprint", "format", "panic", "write", "writeln", "format_args", "unreachable",
-            "todo", "unimplemented", "bail", "anyhow", "vec", "assert", "debug_assert", "assert_eq", "debug_assert_eq",
-            "assert_ne", "debug_assert_ne", "matches", "dbg",
+            "println",
+            "print",
+            "eprintln",
+            "eprint",
+            "format",
+            "panic",
+            "write",
+            "writeln",
+            "format_args",
+            "unreachable",
+            "todo",
+            "unimplemented",
+            "bail",
+            "anyhow",
+            "vec",
+            "assert",
+            "debug_assert",
+            "assert_eq",
+            "debug_assert_eq",
+            "assert_ne",
+            "debug_assert_ne",
+            "matches",
+            "dbg",
         ];
         let name = mac.path.segments.last().map(|s| s.ident.to_string()).unwrap_or_default();
         if KNOWN.contains(&name.as_str()) {
@@ -2212,25 +2496,25 @@ impl<'a> Gen<'a> {
             }
             Ok(v)
         });
-        if let Ok(items) = items {
-            if !items.is_empty() {
-                let path = self.src_of(&mac.path);
-                self.out.push("# ");
-                self.node_tok(&format!("{path}! {{"), &mac.path);
-                self.out.nl();
-                if self.deferred.is_empty() {
-                    self.items(&items);
-                } else {
-                    // inside a fn: same hoisting as any item declared in a function body
-                    for it in items {
-                        self.out.nl();
-                        self.stmt(&Stmt::Item(it));
-                    }
+        if let Ok(items) = items
+            && !items.is_empty()
+        {
+            let path = self.src_of(&mac.path);
+            self.out.push("# ");
+            self.node_tok(&format!("{path}! {{"), &mac.path);
+            self.out.nl();
+            if self.deferred.is_empty() {
+                self.items(&items);
+            } else {
+                // inside a fn: same hoisting as any item declared in a function body
+                for it in items {
+                    self.out.nl();
+                    self.stmt(&Stmt::Item(it));
                 }
-                self.out.nl();
-                self.out.push("# }");
-                return;
             }
+            self.out.nl();
+            self.out.push("# }");
+            return;
         }
         // body parses as call arguments: show as a bang call
         if mac.parse_body_with(Punctuated::<Expr, Token![,]>::parse_terminated).is_ok() {
@@ -2252,7 +2536,7 @@ impl<'a> Gen<'a> {
     }
 
     /// "{} has {count:?}" + args -> "#{a} has #{count.inspect}"
-    fn format_string(&mut self, args: &[&Expr], newline: bool) {
+    fn format_string(&mut self, args: &[&Expr], newline: bool, open: Option<Span>) {
         let Some(Expr::Lit(ExprLit { lit: Lit::Str(fmt), .. })) = args.first() else {
             for (i, a) in args.iter().enumerate() {
                 if i > 0 {
@@ -2267,11 +2551,11 @@ impl<'a> Gen<'a> {
         for a in &args[1..] {
             match a {
                 Expr::Assign(asg) => {
-                    if let Expr::Path(p) = &*asg.left {
-                        if let Some(id) = p.path.get_ident() {
-                            named.insert(id.to_string(), &asg.right);
-                            continue;
-                        }
+                    if let Expr::Path(p) = &*asg.left
+                        && let Some(id) = p.path.get_ident()
+                    {
+                        named.insert(id.to_string(), &asg.right);
+                        continue;
                     }
                     positional.push(a)
                 }
@@ -2283,7 +2567,7 @@ impl<'a> Gen<'a> {
         let mut text = String::new();
         let mut next_pos = 0usize;
         let mut i = 0;
-        self.span_tok("\"", fmt.span());
+        self.span_tok("\"", open.unwrap_or_else(|| fmt.span()));
         while i < chars.len() {
             let c = chars[i];
             if c == '{' && chars.get(i + 1) == Some(&'{') {
@@ -2311,11 +2595,12 @@ impl<'a> Gen<'a> {
                 self.out.push(&escape_rb(&text));
                 text.clear();
                 self.out.push("#{");
-                let precision = spec.split_once('.').map(|(_, p)| p.trim_end_matches(|c: char| !c.is_ascii_digit()).to_string());
-                if let Some(p) = &precision {
-                    if !p.is_empty() {
-                        self.out.push(&format!("format('%.{p}f', "));
-                    }
+                let precision =
+                    spec.split_once('.').map(|(_, p)| p.trim_end_matches(|c: char| !c.is_ascii_digit()).to_string());
+                if let Some(p) = &precision
+                    && !p.is_empty()
+                {
+                    self.out.push(&format!("format('%.{p}f', "));
                 }
                 if arg.is_empty() {
                     if let Some(e) = positional.get(next_pos) {

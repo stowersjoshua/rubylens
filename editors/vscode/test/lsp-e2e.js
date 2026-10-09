@@ -6,7 +6,11 @@
 // and checks that the Ruby text at the landing spot is the identifier rust-analyzer pointed at.
 //
 // Usage:
-//   node test/lsp-e2e.js --ra <rust-analyzer> --rbview <rbview> --project <dir> --file <rel.rs> [--file ...] [--limit N]
+//   node test/lsp-e2e.js --ra <rust-analyzer> --rbview <rbview> --project <dir> --file <rel.rs> [--file ...]
+//                        [--limit N] [--all-features] [--min PCT] [--verbose]
+//
+// --min PCT: exit 1 unless definitions, references and outline each land correctly at least
+// PCT% of the time (hover isn't gated: whether rust-analyzer has something to say varies).
 'use strict';
 
 const cp = require('child_process');
@@ -25,6 +29,7 @@ const PROJECT = path.resolve(opt('--project', '.'));
 const FILES = all('--file');
 const LIMIT = Number(opt('--limit', '400'));
 const VERBOSE = args.includes('--verbose');
+const MIN = args.includes('--min') ? Number(opt('--min')) : null;
 // rust-analyzer settings, sent at startup and whenever it asks (workspace/configuration)
 const RA_CONFIG = {
   checkOnSave: false,
@@ -262,5 +267,14 @@ function kindOf(p) {
   console.log(`\ntotal ${((Date.now() - t0) / 1000).toFixed(1)}s`);
   await lsp.request('shutdown', null).catch(() => {});
   lsp.notify('exit', null);
-  setTimeout(() => process.exit(0), 200);
+  let code = 0;
+  if (MIN !== null) {
+    const gates = [['definitions', totals.defOk, totals.def], ['references', totals.refOk, totals.refs], ['outline', totals.symOk, totals.syms]];
+    for (const [label, ok, n] of gates) {
+      const p = n ? (100 * ok) / n : 100;
+      if (p < MIN) { console.log(`FAIL: ${label} ${p.toFixed(1)}% < ${MIN}%`); code = 1; }
+    }
+    if (!code) console.log(`OK: definitions, references and outline all ≥ ${MIN}%`);
+  }
+  setTimeout(() => process.exit(code), 200);
 })().catch((e) => { console.error('FAIL:', e.message); process.exit(1); });
