@@ -105,23 +105,47 @@ Speed, measured on tokio (555 files):
 | `&x`, `*x`, `.clone()`, lifetimes, `mut` | dropped |
 | Rust signature, generics, field types | kept as comments |
 | Items declared inside a function | shown right after the method (Ruby can't nest them) |
-| Anything untranslated | kept verbatim as `rust!(%q{…})` |
+| `cfg_rt! { pub fn x() {} }` and other macros wrapping items | the items are translated, between `# cfg_rt! {` and `# }` |
+| `macro_rules!` definitions, `tokio::select!` and other DSLs | kept verbatim as comment lines, mapped character-for-character |
+| Anything else untranslated inline | kept verbatim as `rust!(%q{…})` |
 
 ## Testing
 
-Tests run against 64 real crates (2,789 files: tokio, serde, syn, clap, regex, rayon, …):
+### Against a real rust-analyzer
+
+`editors/vscode/test/lsp-e2e.js` drives a live rust-analyzer over LSP and replays exactly what the extension does: click an identifier in the Ruby view, map it to Rust, ask rust-analyzer, map the answer into the target file's Ruby view, and check that the cursor lands on the identifier rust-analyzer meant.
+
+| Project | Definitions landing correctly | Into deps / std | References | Outline |
+|---|---|---|---|---|
+| demo crate | 190 / 190 | 0 / 32 | 27 / 27 | 28 / 28 |
+| app using regex, semver, serde_json, itertools, anyhow | 117 / 117 | 28 / 18 | 7 / 7 | 7 / 7 |
+| rbview's own source (syn, serde, sha2) | 1,313 / 1,313 | 191 / 199 | 603 / 603 | 143 / 143 |
+| tokio (4 core files, all features) | 1,596 / 1,596 | 51 / 287 | 304 / 304 | 291 / 291 |
+
+Hover returned rust-analyzer content for 540 of 540 sampled tokens. Tested with rust-analyzer 2026-08-17 and Rust 1.97 standard-library sources.
+
+```sh
+node editors/vscode/test/lsp-e2e.js --ra $(which rust-analyzer) --project path/to/crate \
+  --file src/lib.rs --file src/other.rs [--all-features] [--limit 400] [--verbose]
+```
+
+### Translation, across 64 real crates (2,789 files: tokio, serde, syn, clap, regex, rayon, …)
 
 - **No crashes.** 1 file fell back to showing raw source.
-- **97.5% of views are syntactically valid Ruby** (`ruby -c`).
-- **Position maps are accurate.** In 400 random files, all 195,834 identifier tokens map back to the right Rust token, apart from intentional renames like `len` → `size`.
-- **Extension end-to-end test** (`node editors/vscode/test/run.js`): definition, hover, references, outline and round-trips, with a mock rust-analyzer.
+- **97.8% of views are syntactically valid Ruby** (`ruby -c`).
+- **Position maps are accurate.** In 400 random files, every identifier token maps back to the right Rust token, apart from intentional renames like `len` → `size`.
+
+### Extension plumbing
+
+`node editors/vscode/test/run.js` runs the extension's providers against a mock `vscode` module: definition, hover, references, outline and round-trips.
 
 ## Known limitations
 
 - **Lossy by design.** Ownership, borrowing, lifetimes and `Send`/`Sync` are erased, and they often explain *why* code is shaped the way it is. Use the view as a reading aid; trust the Rust.
 - **Bindings inside or-patterns.** Patterns like `A(x) | B(x)` can't be expressed in Ruby, which forbids them. Those few views aren't valid Ruby.
-- **Untested with live rust-analyzer.** The extension uses rust-analyzer only through VS Code's standard `execute*Provider` commands, but it has been tested against a mock, not a live server.
-- **Macro bodies.** Calls like `quote!`, `ast_struct!` or `tokio::select!` are shown verbatim unless their arguments parse as expressions.
+- **VS Code itself is untested.** The mapping and real rust-analyzer responses are tested headlessly. The thin layer that forwards requests through VS Code's `execute*Provider` commands has only been tested against a mock.
+- **Macro bodies.** Macros that wrap items are translated. DSL-style macros like `tokio::select!` or `quote!` are shown as verbatim Rust, which still navigates precisely but isn't translated.
+- **Feature-gated code.** Code behind cargo features that rust-analyzer considers disabled has no semantics to navigate. Enable the features in your rust-analyzer settings, as you would for Rust.
 - **Partly tuned for Ruby readers.** A few method renames assume iterator semantics (`map`/`filter` on `Option` read as Enumerable).
 
 ## Ideas for next steps

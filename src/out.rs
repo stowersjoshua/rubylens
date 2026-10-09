@@ -138,11 +138,49 @@ impl Out {
         }
     }
 
+    /// Emit source lines `from.line..=to.line` verbatim behind `prefix` (e.g. "# "),
+    /// common indentation removed, each line mapped character-for-character.
+    pub fn verbatim(&mut self, from: LineColumn, to: LineColumn, prefix: &str) {
+        if from.line == 0 {
+            return;
+        }
+        let lines: Vec<(usize, Vec<char>)> = (from.line..=to.line)
+            .filter_map(|ln| self.src_lines.get(ln - 1).map(|c| (ln, c.clone())))
+            .collect();
+        let dedent = lines
+            .iter()
+            .filter(|(_, c)| c.iter().any(|ch| !ch.is_whitespace()))
+            .map(|(_, c)| c.iter().take_while(|ch| ch.is_whitespace()).count())
+            .min()
+            .unwrap_or(0);
+        for (ln, chars) in lines {
+            self.nl();
+            let body: String = chars.iter().skip(dedent).collect::<String>().trim_end().to_string();
+            if body.is_empty() {
+                self.push(prefix.trim_end());
+            } else {
+                self.push(prefix);
+                let start = LineColumn { line: ln, column: dedent };
+                let end = LineColumn { line: ln, column: dedent + body.chars().count() };
+                self.tok(&body, start, end);
+            }
+            self.nl();
+        }
+    }
+
     /// Convert a proc-macro2 char column to a UTF-16 column for the given source line.
     pub fn col16(&self, lc: LineColumn) -> u32 {
         match self.src_lines.get(lc.line.wrapping_sub(1)) {
             Some(chars) => chars.iter().take(lc.column).map(|c| c.len_utf16() as u32).sum(),
             None => lc.column as u32,
+        }
+    }
+
+    /// Exact source text between two positions on the same line (char columns).
+    pub fn src_exact(&self, a: LineColumn, b: LineColumn) -> String {
+        match self.src_lines.get(a.line.wrapping_sub(1)) {
+            Some(chars) if a.line == b.line => chars[a.column.min(chars.len())..b.column.min(chars.len())].iter().collect(),
+            _ => self.src_text(a, b),
         }
     }
 

@@ -34,14 +34,15 @@ class SrcMap {
     }
     const b = innermost(this.blocks, pos.line, 2, 3);
     if (b) return { line: Math.min(b[0] + (pos.line - b[2]), b[1]), character: 0 };
-    // Nothing on this line: nearest mapped Rust line below, then above
-    for (let d = 1; d < 50; d++) {
-      for (const l of [pos.line + d, pos.line - d]) {
-        const segs = this.byRs.get(l);
-        if (segs && segs.length) return { line: segs[0][0], character: segs[0][1] };
-      }
+    // Nothing on this line (e.g. inside a long doc comment): nearest mapped Rust line,
+    // preferring the code that follows; failing that, the top of the view.
+    let best = null;
+    for (const [l, segs] of this.byRs) {
+      const d = l >= pos.line ? l - pos.line : (pos.line - l) * 2 + 1;
+      if (!best || d < best.d) best = { d, seg: segs[0] };
     }
-    return null;
+    if (best) return { line: best.seg[0], character: best.seg[1] };
+    return { line: 0, character: 0 };
   }
 
   /** The Ruby token range under a position (for highlighting the clicked word). */

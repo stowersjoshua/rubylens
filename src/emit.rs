@@ -119,7 +119,26 @@ pub fn tok_range<T: ToTokens + ?Sized>(t: &T) -> Option<(LineColumn, LineColumn)
     acc
 }
 
+/// `%q` delimiters that are safe for `text` (None: needs an escaped "..." string).
+fn pct_q_delims(text: &str) -> Option<(String, String)> {
+    if text.contains('\\') {
+        return None;
+    }
+    for (open, close) in [('{', '}'), ('(', ')'), ('[', ']')] {
+        let mut depth = 0i32;
+        let mut ok = true;
+        for c in text.chars() {
+            if c == open { depth += 1 } else if c == close { depth -= 1; if depth < 0 { ok = false; break; } }
+        }
+        if ok && depth == 0 {
+            return Some((format!("%q{open}"), close.to_string()));
+        }
+    }
+    ['~', '^', '|', '!', '`', '@'].into_iter().find(|d| !text.contains(*d)).map(|d| (format!("%q{d}"), d.to_string()))
+}
+
 /// `%q` literal with a delimiter that doesn't occur in the text.
+#[allow(dead_code)]
 fn pct_q(text: &str) -> String {
     for (open, close) in [('{', '}'), ('(', ')'), ('[', ']')] {
         // paired delimiters are fine when balanced
@@ -194,10 +213,28 @@ impl<'a> Gen<'a> {
 
     /// Raw Rust kept verbatim for constructs we don't translate.
     fn raw<T: ToTokens + ?Sized>(&mut self, node: &T) {
-        let text = self.src_of(node);
         self.out.push("rust!(");
-        self.node_tok(&pct_q(&text), node);
+        self.raw_literal(node);
         self.out.push(")");
+    }
+
+    /// Source text of `node` as a %q literal. Single-line source is kept exact (not
+    /// whitespace-collapsed) so every character maps back to its Rust column.
+    fn raw_literal<T: ToTokens + ?Sized>(&mut self, node: &T) {
+        let range = tok_range(node);
+        let text = match range {
+            Some((a, b)) if a.line == b.line => self.out.src_exact(a, b),
+            _ => self.src_of(node),
+        };
+        match (pct_q_delims(&text), range) {
+            (Some((open, close)), Some((a, b))) => {
+                self.out.push(&open);
+                self.out.tok(&text, a, b);
+                self.out.push(&close);
+            }
+            (_, Some((a, b))) => self.out.tok(&format!("\"{}\"", escape_rb(&text)), a, b),
+            (_, None) => self.out.push(&format!("\"{}\"", escape_rb(&text))),
+        }
     }
 
     // ---------------------------------------------------------------- attrs
@@ -359,21 +396,30 @@ impl<'a> Gen<'a> {
             Item::Macro(m) => {
                 self.attrs(&m.attrs);
                 if m.mac.path.is_ident("macro_rules") {
-                    self.out.push("# macro_rules! ");
-                    if let Some(id) = &m.ident {
-                        self.ident(id);
+                    // Kept verbatim (as comments) so jumps to items defined inside macros —
+                    // common in std, e.g. integer methods — land on the exact token.
+                    match tok_range(&m.mac) {
+                        Some((a, b)) => {
+                            self.out.comment("macro definition (Rust, verbatim):");
+                            self.out.verbatim(a, b, "#   ");
+                        }
+                        None => {
+                            self.out.push("# macro_rules! ");
+                            if let Some(id) = &m.ident {
+                                self.ident(id);
+                            }
+                        }
                     }
-                    self.out.push("  (macro definition omitted)");
                 } else {
-                    self.macro_call(&m.mac);
+                    self.macro_stmt(&m.mac);
                 }
             }
             other => {
-                // extern crate, foreign mods, unions, trait aliases...
-                let text = self.src_of(other);
-                let short: String = text.chars().take(120).collect();
-                self.out.push("# ");
-                self.node_tok(&short, other);
+                // extern crate, foreign mods, unions, trait aliases, `pub macro`...: verbatim
+                match tok_range(other) {
+                    Some((a, b)) => self.out.verbatim(a, b, "# "),
+                    None => self.out.push("# (unsupported item)"),
+                }
             }
         }
     }
@@ -722,31 +768,7 @@ impl<'a> Gen<'a> {
         for (idx, it) in i.items.iter().enumerate() {
             if idx > 0 || i.trait_.is_some() { self.out.blank(); } else { self.out.nl(); }
             let rb_start = self.out.line;
-            match it {
-                ImplItem::Fn(f) => {
-                    self.attrs(&f.attrs);
-                    self.fn_def(&f.sig, Some(&f.block), false);
-                }
-                ImplItem::Const(c) => {
-                    self.attrs(&c.attrs);
-                    self.ident(&c.ident);
-                    self.out.push(" = ");
-                    self.expr(&c.expr);
-                }
-                ImplItem::Type(t) => {
-                    self.attrs(&t.attrs);
-                    self.out.push("# type ");
-                    self.ident(&t.ident);
-                    self.out.push(" = ");
-                    let s = self.src_of(&t.ty);
-                    self.node_tok(&s, &t.ty);
-                }
-                other => {
-                    self.out.push("# ");
-                    let s = self.src_of(other);
-                    self.node_tok(&s, other);
-                }
-            }
+            self.impl_item(it);
             self.out.nl();
             self.out.block(rb_start, tok_range(it));
         }
@@ -754,6 +776,61 @@ impl<'a> Gen<'a> {
         self.out.indent -= 1;
         self.out.nl();
         self.out.push("end");
+    }
+
+    fn impl_item(&mut self, it: &ImplItem) {
+        match it {
+            ImplItem::Fn(f) => {
+                self.attrs(&f.attrs);
+                self.fn_def(&f.sig, Some(&f.block), false);
+            }
+            ImplItem::Const(c) => {
+                self.attrs(&c.attrs);
+                self.ident(&c.ident);
+                self.out.push(" = ");
+                self.expr(&c.expr);
+            }
+            ImplItem::Type(t) => {
+                self.attrs(&t.attrs);
+                self.out.push("# type ");
+                self.ident(&t.ident);
+                self.out.push(" = ");
+                let s = self.src_of(&t.ty);
+                self.node_tok(&s, &t.ty);
+            }
+            ImplItem::Macro(m) => {
+                self.attrs(&m.attrs);
+                // `cfg_net! { pub async fn connect(..) {..} }` inside an impl: translate the methods
+                let parsed = m.mac.parse_body_with(|input: parse::ParseStream| {
+                    let mut v = Vec::new();
+                    while !input.is_empty() {
+                        v.push(input.parse::<ImplItem>()?);
+                    }
+                    Ok(v)
+                });
+                match parsed {
+                    Ok(items) if !items.is_empty() => {
+                        let path = self.src_of(&m.mac.path);
+                        self.out.push("# ");
+                        self.node_tok(&format!("{path}! {{"), &m.mac.path);
+                        for (i, sub) in items.iter().enumerate() {
+                            if i > 0 { self.out.blank(); } else { self.out.nl(); }
+                            let rb_start = self.out.line;
+                            self.impl_item(sub);
+                            self.out.nl();
+                            self.out.block(rb_start, tok_range(sub));
+                        }
+                        self.out.nl();
+                        self.out.push("# }");
+                    }
+                    _ => self.macro_stmt(&m.mac),
+                }
+            }
+            other => match tok_range(other) {
+                Some((a, b)) => self.out.verbatim(a, b, "# "),
+                None => self.out.push("# (unsupported impl item)"),
+            },
+        }
     }
 
     /// A path used as a constant/type: `a::b::Foo` -> `A::B::Foo`
@@ -818,10 +895,14 @@ impl<'a> Gen<'a> {
                 self.out.push(" — shown after this method");
                 self.deferred.last_mut().unwrap().push((it.clone(), fn_name));
             }
+            Stmt::Expr(Expr::Macro(m), _) => {
+                self.attrs(&m.attrs);
+                self.macro_stmt(&m.mac);
+            }
             Stmt::Expr(e, _) => self.expr(e),
             Stmt::Macro(m) => {
                 self.attrs(&m.attrs);
-                self.macro_call(&m.mac);
+                self.macro_stmt(&m.mac);
             }
         }
     }
@@ -1092,6 +1173,7 @@ impl<'a> Gen<'a> {
 
     fn closure_param(&mut self, p: &Pat) {
         match Self::strip_pat(p) {
+            Pat::Tuple(t) if t.elems.is_empty() => self.out.push("_"),
             Pat::Tuple(t) => {
                 self.out.push("(");
                 for (i, e) in t.elems.iter().enumerate() {
@@ -2111,16 +2193,61 @@ impl<'a> Gen<'a> {
         }
     }
 
+    /// A macro invocation on its own line (item or statement position).
+    fn macro_stmt(&mut self, mac: &Macro) {
+        const KNOWN: &[&str] = &[
+            "println", "print", "eprintln", "eprint", "format", "panic", "write", "writeln", "format_args", "unreachable",
+            "todo", "unimplemented", "bail", "anyhow", "vec", "assert", "debug_assert", "assert_eq", "debug_assert_eq",
+            "assert_ne", "debug_assert_ne", "matches", "dbg",
+        ];
+        let name = mac.path.segments.last().map(|s| s.ident.to_string()).unwrap_or_default();
+        if KNOWN.contains(&name.as_str()) {
+            return self.macro_call(mac);
+        }
+        // `cfg_rt! { pub mod x; fn y() {} }` — a body of ordinary items: translate them
+        let items = mac.parse_body_with(|input: parse::ParseStream| {
+            let mut v = Vec::new();
+            while !input.is_empty() {
+                v.push(input.parse::<Item>()?);
+            }
+            Ok(v)
+        });
+        if let Ok(items) = items {
+            if !items.is_empty() {
+                let path = self.src_of(&mac.path);
+                self.out.push("# ");
+                self.node_tok(&format!("{path}! {{"), &mac.path);
+                self.out.nl();
+                if self.deferred.is_empty() {
+                    self.items(&items);
+                } else {
+                    // inside a fn: same hoisting as any item declared in a function body
+                    for it in items {
+                        self.out.nl();
+                        self.stmt(&Stmt::Item(it));
+                    }
+                }
+                self.out.nl();
+                self.out.push("# }");
+                return;
+            }
+        }
+        // body parses as call arguments: show as a bang call
+        if mac.parse_body_with(Punctuated::<Expr, Token![,]>::parse_terminated).is_ok() {
+            return self.macro_call(mac);
+        }
+        // anything else (tokio::select!, DSLs): verbatim, mapped line by line
+        match tok_range(mac) {
+            Some((a, b)) if b.line > a.line => self.out.verbatim(a, b, "# "),
+            _ => self.raw_macro(mac),
+        }
+    }
+
     fn raw_macro(&mut self, mac: &Macro) {
         let name = mac.path.segments.last().map(|s| s.ident.to_string()).unwrap_or_default();
-        let body = self.src_of(&mac.tokens);
         self.span_tok(&format!("{}!", rb_ident(&name)), mac.path.span());
         self.out.push("(");
-        let lit = pct_q(&body);
-        match tok_range(&mac.tokens) {
-            Some((a, b)) => self.out.tok(&lit, a, b),
-            None => self.out.push(&lit),
-        }
+        self.raw_literal(&mac.tokens);
         self.out.push(")");
     }
 
