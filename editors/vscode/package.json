@@ -1,0 +1,52 @@
+{
+  "name": "rbview",
+  "displayName": "rbview — Read Rust as Ruby",
+  "description": "Open any Rust file as a generated, read-only Ruby view. Go to definition, hover, references and outline work through rust-analyzer.",
+  "version": "0.1.0",
+  "publisher": "local",
+  "license": "MIT",
+  "engines": { "vscode": "^1.85.0" },
+  "categories": ["Programming Languages", "Other"],
+  "main": "./extension.js",
+  "activationEvents": ["onLanguage:rust", "onFileSystem:rbview"],
+  "extensionDependencies": ["rust-lang.rust-analyzer"],
+  "contributes": {
+    "commands": [
+      { "command": "rbview.open", "title": "Open as Ruby", "category": "rbview", "icon": "$(ruby)" },
+      { "command": "rbview.showRust", "title": "Show Rust Source", "category": "rbview", "icon": "$(go-to-file)" },
+      { "command": "rbview.buildCache", "title": "Pre-generate Ruby Views for Workspace", "category": "rbview" }
+    ],
+    "menus": {
+      "editor/title": [
+        { "command": "rbview.open", "when": "resourceLangId == rust", "group": "navigation" },
+        { "command": "rbview.showRust", "when": "resourceScheme == rbview", "group": "navigation" }
+      ],
+      "explorer/context": [
+        { "command": "rbview.open", "when": "resourceExtname == .rs", "group": "navigation" }
+      ],
+      "commandPalette": [
+        { "command": "rbview.open", "when": "resourceLangId == rust" },
+        { "command": "rbview.showRust", "when": "resourceScheme == rbview" }
+      ]
+    },
+    "keybindings": [
+      { "command": "rbview.open", "key": "ctrl+alt+r", "mac": "cmd+alt+r", "when": "editorLangId == rust" },
+      { "command": "rbview.showRust", "key": "ctrl+alt+r", "mac": "cmd+alt+r", "when": "resourceScheme == rbview" }
+    ],
+    "configuration": {
+      "title": "rbview",
+      "properties": {
+        "rbview.executable": {
+          "type": "string",
+          "default": "rbview",
+          "description": "Path to the rbview binary (built with `cargo install --path .`)."
+        },
+        "rbview.openBeside": {
+          "type": "boolean",
+          "default": true,
+          "description": "Open the Ruby view beside the Rust file rather than replacing it."
+        }
+      }
+    }
+  }
+}
