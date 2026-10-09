@@ -79,6 +79,10 @@ echo "11. path calls (a::b::f) silently stop mapping — nothing maps wrongly, t
 mutate src/emit.rs 'self.span_tok(&n, last.ident.span());' 'self.out.push(&n);'
 caught "corpus coverage" "^FAIL" scripts/corpus-check.py --show 0
 
+echo "12. a view lookup that scans every block (quadratic outlines in big files)"
+mutate editors/vscode/srcmap.js 'return (line) => (line >= 0 && line <= max && owner[line] >= 0 ? blocks[owner[line]] : null);' 'return (line) => blocks.filter((bl) => line >= bl[a] && line <= bl[b]).sort((x, y) => (x[b] - x[a]) - (y[b] - y[a]))[0] || null;'
+caught "extension tests (lookup scaling)" "FAIL: fallback lookups scale" node editors/vscode/test/run.js
+
 echo
 echo "$pass caught, $fail missed"
 [ $fail = 0 ]

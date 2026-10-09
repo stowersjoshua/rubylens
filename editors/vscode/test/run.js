@@ -122,6 +122,15 @@ const vscode = {
 const origLoad = Module._load;
 Module._load = function (req, ...rest) { return req === 'vscode' ? vscode : origLoad.call(this, req, ...rest); };
 
+// count `rbview gen` processes per file
+const cp = require('child_process');
+const spawned = new Map();
+const origExecFile = cp.execFile;
+cp.execFile = function (file, args, ...rest) {
+  if (args[0] === 'gen') spawned.set(args[1], (spawned.get(args[1]) || 0) + 1);
+  return origExecFile.call(this, file, args, ...rest);
+};
+
 // ---------------------------------------------------------------- tests
 const ext = require('../extension');
 const { SrcMap } = require('../srcmap');
@@ -186,6 +195,52 @@ const { SrcMap } = require('../srcmap');
     if (back.line !== s[0] && !(p.line === s[3])) rtBad++;
   }
   ok(rtBad === 0, `${rt} tokens round-trip Ruby→Rust→Ruby`);
+
+  // 8. a reference list spanning another file: mapped in parallel, one `rbview gen` for that file
+  const other = path.join(require('os').tmpdir(), `rbview-test-${process.pid}`, 'other.rs');
+  fs.mkdirSync(path.dirname(other), { recursive: true });
+  fs.writeFileSync(other, Array.from({ length: 30 }, (_, i) => `fn f${i}() { shoelace(); }`).join('\n') + '\n');
+  const realRefs = fakeRA['vscode.executeReferenceProvider'];
+  fakeRA['vscode.executeReferenceProvider'] = (uri, pos) => [
+    ...realRefs(uri, pos),
+    ...rsText(Uri.file(other)).flatMap((l, i) => {
+      const c = l.indexOf('shoelace');
+      return c < 0 ? [] : [{ uri: Uri.file(other), range: new Range(new Position(i, c), new Position(i, c + 8)) }];
+    }),
+  ];
+  const wide = await providers.registerReferenceProvider.provideReferences(doc, call, {});
+  fakeRA['vscode.executeReferenceProvider'] = realRefs;
+  const otherRb = (await vscode.workspace.openTextDocument(Uri.from({ scheme: 'rbview', path: other + '.rb' }))).getText().split('\n');
+  const inOther = wide.filter((r) => r.uri.path === other + '.rb');
+  ok(inOther.length === 30 && inOther.every((r) => otherRb[r.range.start.line].slice(r.range.start.character, r.range.end.character) === 'shoelace'),
+    `references in another file (${inOther.length}) are mapped into its view`);
+  ok(spawned.get(other) === 1, `parallel lookups into one file share one rbview gen (${spawned.get(other)})`);
+  fs.rmSync(path.dirname(other), { recursive: true, force: true });
+
+  // 9. lookups that fall back to blocks or the nearest line stay cheap in big views: 8x the
+  // lookups on an 8x bigger map should take ~8x the time; at O(n) per lookup it's ~64x
+  const timeLookups = (n) => {
+    // n two-line blocks, a segment only on each block's first line, then n unmapped Rust lines
+    const segs = [], blocks = [];
+    for (let i = 0; i < n; i++) { segs.push([2 * i, 0, 3, 2 * i, 0, 3]); blocks.push([2 * i, 2 * i + 1, 2 * i, 2 * i + 1]); }
+    const sm = new SrcMap({ segs, blocks });
+    sm.rsToRb({ line: 1, character: 0 }); // builds the lazy indexes
+    sm.rbToRs({ line: 1, character: 0 });
+    sm.rsToRb({ line: 2 * n, character: 0 });
+    let best = Infinity;
+    for (let rep = 0; rep < 5; rep++) {
+      const t = process.hrtime.bigint();
+      for (let i = 0; i < n; i++) {
+        sm.rsToRb({ line: 2 * i + 1, character: 0 });
+        sm.rbToRs({ line: 2 * i + 1, character: 0 });
+        sm.rsToRb({ line: 2 * n + i, character: 0 });
+      }
+      best = Math.min(best, Number(process.hrtime.bigint() - t));
+    }
+    return best;
+  };
+  const ratio = timeLookups(32000) / timeLookups(4000);
+  ok(ratio < 24, `fallback lookups scale linearly (8x the map: ${ratio.toFixed(1)}x the time)`);
 
   console.log(`\n${pass} checks passed`);
 })().catch((e) => { console.error('FAIL:', e.message); process.exit(1); });

@@ -20,7 +20,7 @@
 | **map invariants** | bounds, identity and coverage of the [source map](spec/source-map.md) | `tests/golden.rs` |
 | **Ruby syntax** | views parse with `ruby -c`, except cases marked `rbview-golden: ruby-invalid` | `tests/golden.rs` |
 | **spec linkage** | every golden case is specified, and every spec citation exists | `tests/golden.rs` ↔ `docs/spec/translation.md` |
-| extension (mock) | providers map positions both ways | `editors/vscode/test/run.js` |
+| extension (mock) | providers map positions both ways, references across files share one `rbview gen`, lookups stay cheap in huge views | `editors/vscode/test/run.js` |
 | attribution guards | the commit-msg hook and Claude Code hook still block AI attribution | `scripts/guard-selftest.sh` |
 | repo rules | no tracked build output, `.vsix` matches source, demo view fresh, markdown links resolve, no attribution in unpushed commits | `scripts/check.sh` |
 | **corpus** (`--full`) | 2,789 files from 66 pinned crates: no crashes, ≥ 97.7% valid Ruby, ≤ 0.01% identifier mismatches, ≥ 98.8% of Rust identifiers reachable | `scripts/corpus-check.py`, `tests/corpus/` |

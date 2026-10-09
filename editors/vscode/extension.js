@@ -8,6 +8,7 @@
 
 const vscode = require('vscode');
 const cp = require('child_process');
+const os = require('os');
 const path = require('path');
 const { SrcMap } = require('./srcmap');
 
@@ -35,7 +36,28 @@ function rootFor(rsUri) {
   return wf ? wf.uri.fsPath : path.dirname(rsUri.fsPath);
 }
 
+/** At most this many `rbview gen` processes at once (a reference list can span hundreds of files). */
+const MAX_GEN = Math.max(2, os.cpus().length);
+let running = 0;
+const waiting = [];
+
+async function limited(job) {
+  while (running >= MAX_GEN) await new Promise((wake) => waiting.push(wake));
+  running++;
+  try {
+    return await job();
+  } finally {
+    running--;
+    const next = waiting.shift();
+    if (next) next();
+  }
+}
+
 function runGen(rsUri) {
+  return limited(() => spawnGen(rsUri));
+}
+
+function spawnGen(rsUri) {
   return new Promise((resolve, reject) => {
     cp.execFile(
       exe(),
@@ -70,10 +92,18 @@ class RubyViewProvider {
   }
 }
 
+/** rbview uri string -> Promise of the view being opened (so parallel lookups share one `rbview gen`) */
+const opening = new Map();
+
 /** Ensure the Ruby view (and its map) for a Rust file is loaded. */
 async function mapFor(rbUri) {
   const key = rbUri.toString();
-  if (!maps.has(key)) await vscode.workspace.openTextDocument(rbUri);
+  if (!maps.has(key)) {
+    if (!opening.has(key)) {
+      opening.set(key, Promise.resolve(vscode.workspace.openTextDocument(rbUri)).finally(() => opening.delete(key)));
+    }
+    await opening.get(key);
+  }
   return maps.get(key);
 }
 
@@ -115,24 +145,17 @@ function locationProvider(command) {
     const { result, origin } = await viaRust(document, position, command);
     if (!result) return null;
     const list = Array.isArray(result) ? result : [result];
-    const out = [];
-    for (const loc of list) {
-      const f = await forwardLocation(loc, origin);
-      if (f) out.push(f);
-    }
-    return out;
+    // targets in different files are mapped in parallel (each may need its own `rbview gen`)
+    const out = await Promise.all(list.map((loc) => forwardLocation(loc, origin)));
+    return out.filter(Boolean);
   };
 }
 
 async function provideReferences(document, position) {
   const { result } = await viaRust(document, position, 'vscode.executeReferenceProvider');
   if (!result) return [];
-  const out = [];
-  for (const loc of result) {
-    const f = await forwardLocation(loc);
-    if (f) out.push(new vscode.Location(f.targetUri, f.targetSelectionRange));
-  }
-  return out;
+  const out = await Promise.all(result.map((loc) => forwardLocation(loc)));
+  return out.filter(Boolean).map((f) => new vscode.Location(f.targetUri, f.targetSelectionRange));
 }
 
 async function provideHover(document, position) {

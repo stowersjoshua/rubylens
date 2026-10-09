@@ -22,6 +22,10 @@ Every feature maps the Ruby position to Rust (`rbToRs`), runs VS Code's own prov
 
 Targets in `.rs` files open as their Ruby view. Other targets open as-is.
 
+Results that land in several files are mapped in parallel. Each view is generated at most once at a time (parallel lookups into the same file share one `rbview gen`), and at most one `rbview gen` per CPU core runs at once. The CLI's cache makes this safe ([cache.md](cache.md)).
+
+Position lookups (`srcmap.js`) cost O(segments on one line) or O(1) after a one-time index per view, never O(size of the view): an outline or a long reference list makes thousands of lookups in one view, and generated files have 100,000+ segments.
+
 ## Commands and settings
 
 | ID | Title | Default key |
@@ -41,6 +45,6 @@ Targets in `.rs` files open as their Ruby view. Other targets open as-is.
 
 ## Tests
 
-- `node editors/vscode/test/run.js`: the providers against a mock `vscode` module and a toy rust-analyzer.
+- `node editors/vscode/test/run.js`: the providers against a mock `vscode` module and a toy rust-analyzer, including references across files and how lookups scale.
 - `scripts/lsp-check.sh`: the same mapping flow against a real rust-analyzer.
 - `tools/capture/capture.sh`: the real extension in real VS Code. Every step waits for the expected UI.
