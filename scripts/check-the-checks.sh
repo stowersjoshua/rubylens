@@ -100,6 +100,14 @@ echo "16. UTF-16 columns found by scanning the line for every token"
 mutate src/out.rs 'Some((l, _)) => l.col16(lc.column),' 'Some((_, text)) => text.chars().take(lc.column).map(|c| c.len_utf16() as u32).sum(),'
 caught "scaling check (long lines)" "FAIL: superlinear generation for: long ASCII line" sh -c 'cargo build --release -q 2>/dev/null && scripts/scaling-check.py'
 
+echo "17. the server keeps serving views made with an old symbols.json"
+mutate src/serve.rs 'Some((was, kinds)) if *was == now => kinds.clone(),' 'Some((_, kinds)) => kinds.clone(),'
+caught "server tests (stale kinds)" "follows_symbols_json_without_a_restart.*FAILED" cargo test -q --test serve
+
+echo "18. the extension drops the requests a dead server didn't answer"
+mutate editors/vscode/extension.js 'if (!(e instanceof ServerGone)) throw e;' 'throw e;'
+caught "extension tests (server crash)" "FAIL: all 8 views open" node editors/vscode/test/run.js
+
 echo
 echo "$pass caught, $fail missed"
 [ $fail = 0 ]

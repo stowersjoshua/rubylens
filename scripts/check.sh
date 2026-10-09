@@ -34,10 +34,12 @@ tracked_junk() {
 vsix_in_sync() {
   # The committed .vsix is what users install; it must contain the current extension source.
   python3 - <<'PY'
-import sys, zipfile
+import glob, os, sys, zipfile
 z = zipfile.ZipFile("editors/vscode/rbview-0.1.0.vsix")
-bad = [f for f in ("extension.js", "srcmap.js", "package.json")
-       if z.read("extension/" + f) != open("editors/vscode/" + f, "rb").read()]
+shipped = set(z.namelist())
+source = ["package.json"] + sorted(os.path.basename(p) for p in glob.glob("editors/vscode/*.js"))
+bad = [f for f in source
+       if "extension/" + f not in shipped or z.read("extension/" + f) != open("editors/vscode/" + f, "rb").read()]
 if bad:
     sys.exit("editors/vscode/rbview-0.1.0.vsix is stale for: " + ", ".join(bad)
              + "\nrebuild: (cd editors/vscode && npx @vscode/vsce package --allow-missing-repository --skip-license -o rbview-0.1.0.vsix)")

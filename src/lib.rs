@@ -2,16 +2,17 @@
 //!
 //! [`generate`] turns one Rust file into a read-only Ruby projection plus a
 //! position map (see `docs/spec/source-map.md`). [`cache`] keeps views in the
-//! `.rbview/` folder and builds whole repos (see `docs/spec/cache.md`); the CLI
-//! is `main.rs`.
+//! `.rbview/` folder and builds whole repos (see `docs/spec/cache.md`). [`serve`]
+//! answers editors over stdin/stdout (see `docs/spec/serve.md`); the CLI is `main.rs`.
 
 pub mod bench;
 pub mod cache;
 pub mod emit;
 pub mod out;
 pub mod range;
+pub mod serve;
 
-pub use cache::{BuildReport, CACHE_DIR, Kinds, View, cmd_build, find_root, gen_cached, load_kinds};
+pub use cache::{BuildReport, CACHE_DIR, Kinds, View, cmd_build, find_root, gen_cached, load_kinds, resolve};
 use emit::Gen;
 pub use emit::{Kind, KindMap};
 pub use out::SourceMap;

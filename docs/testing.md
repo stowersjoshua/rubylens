@@ -22,7 +22,8 @@
 | **Ruby syntax** | views parse with `ruby -c`, except cases marked `rbview-golden: ruby-invalid` | `tests/golden.rs` |
 | **spec linkage** | every golden case is specified, and every spec citation exists | `tests/golden.rs` ↔ `docs/spec/translation.md` |
 | **cache** | views are reused exactly when still right (source, generator and symbol kinds unchanged), builds are deterministic, parallel readers never see half a file | `tests/cache.rs` |
-| extension (mock) | providers map positions both ways, references across files share one `rbview gen`, lookups stay cheap in huge views | `editors/vscode/test/run.js` |
+| **server** | `rbview serve` answers what `rbview gen --json` prints, matches parallel responses by id, follows `symbols.json`, survives bad requests, exits on EOF, idle or a replaced binary | `tests/serve.rs` |
+| extension (mock) | providers map positions both ways, references across files share one request, lookups stay cheap in huge views, views still open when the server dies or doesn't exist | `editors/vscode/test/run.js` |
 | **generation scales linearly** | 8x the input takes < 20x the time, for the shapes that have been superlinear before (deep nesting, long lines, long matches, …) | `scripts/scaling-check.py` |
 | attribution guards | the commit-msg hook and Claude Code hook still block AI attribution | `scripts/guard-selftest.sh` |
 | repo rules | no tracked build output, `.vsix` matches source, demo view fresh, markdown links resolve, no attribution in unpushed commits | `scripts/check.sh` |

@@ -24,7 +24,7 @@ callgrind_annotate --inclusive=yes /tmp/cg | head -60     # where the time goes,
 callgrind_annotate /tmp/cg | head -40                     # self cost: allocation, memcpy, hashing
 ```
 
-For `rbview gen` latency (what the editor waits for), time whole processes against a built cache (`rbview build <repo>` first), cache hit and `--no-cache`, median of 15 or more.
+For what the editor waits for, time round trips through `rbview serve` (the editor's path) and whole `rbview gen` processes (the fallback), against a built cache (`rbview build <repo>` first), cache hit and `--no-cache`, median of 15 or more. A protocol client is a few lines of Python: write JSON lines, read one line per request.
 
 ## 2. Change, then prove the output is identical
 

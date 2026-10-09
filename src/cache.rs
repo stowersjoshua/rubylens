@@ -241,6 +241,28 @@ pub struct View {
     pub parse_error: Option<String>,
 }
 
+impl View {
+    /// `{"rbPath", "cached", "ruby", "map"}`: what `rbview gen --json` prints and `rbview serve`
+    /// returns for a `gen` request.
+    pub fn to_json(&self) -> String {
+        format!(
+            "{{\"rbPath\":{},\"cached\":{},\"ruby\":{},\"map\":{}}}",
+            serde_json::to_string(&self.rb_path.to_string_lossy()).unwrap(),
+            self.cached,
+            serde_json::to_string(&self.ruby).unwrap(),
+            self.map_json
+        )
+    }
+}
+
+/// The canonical file and cache root for a request: `root` if given, else [`find_root`].
+pub fn resolve(file: &Path, root: Option<&Path>) -> io::Result<(PathBuf, PathBuf)> {
+    let file = file.canonicalize()?;
+    let root = root.map(Path::to_path_buf).unwrap_or_else(|| find_root(&file));
+    let root = root.canonicalize().unwrap_or(root);
+    Ok((file, root))
+}
+
 /// Generate (or reuse) the cached view for one file.
 pub fn gen_cached(file: &Path, root: &Path, kinds: &Kinds, use_cache: bool) -> io::Result<View> {
     let src = fs::read_to_string(file)?;

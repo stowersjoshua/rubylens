@@ -32,6 +32,7 @@ class Uri {
   static file(p) { return new Uri('file', p); }
   toString() { return `${this.scheme}:${this.path}`; }
 }
+let exeSetting = BIN; // the rbview.executable setting
 const providers = {};
 let contentProvider;
 const docs = new Map();
@@ -98,7 +99,7 @@ const vscode = {
   workspace: {
     workspaceFolders: [{ uri: Uri.file(DEMO) }],
     getWorkspaceFolder: () => ({ uri: Uri.file(DEMO) }),
-    getConfiguration: () => ({ get: (k, d) => (k === 'executable' ? BIN : d) }),
+    getConfiguration: () => ({ get: (k, d) => (k === 'executable' ? exeSetting : d) }),
     registerTextDocumentContentProvider: (_s, p) => { contentProvider = p; return {}; },
     openTextDocument: async (uri) => {
       if (!docs.has(uri.toString())) {
@@ -122,14 +123,37 @@ const vscode = {
 const origLoad = Module._load;
 Module._load = function (req, ...rest) { return req === 'vscode' ? vscode : origLoad.call(this, req, ...rest); };
 
-// count `rbview gen` processes per file
+// count how each view is produced: requests to `rbview serve` and one-shot `rbview gen` runs
 const cp = require('child_process');
-const spawned = new Map();
+const count = (m, k) => m.set(k, (m.get(k) || 0) + 1);
+const served = new Map();
+const oneShot = new Map();
+const servers = [];
 const origExecFile = cp.execFile;
 cp.execFile = function (file, args, ...rest) {
-  if (args[0] === 'gen') spawned.set(args[1], (spawned.get(args[1]) || 0) + 1);
+  if (args[0] === 'gen') count(oneShot, args[1]);
   return origExecFile.call(this, file, args, ...rest);
 };
+const origSpawn = cp.spawn;
+cp.spawn = function (file, args, ...rest) {
+  const child = origSpawn.call(this, file, args, ...rest);
+  if (args[0] === 'serve') {
+    servers.push(child);
+    const write = child.stdin.write.bind(child.stdin);
+    child.stdin.write = (data, ...more) => {
+      for (const line of String(data).split('\n').filter(Boolean)) count(served, JSON.parse(line).file);
+      return write(data, ...more);
+    };
+  }
+  return child;
+};
+const tmp = fs.mkdtempSync(path.join(require('os').tmpdir(), 'rbview-test-'));
+const tmpRs = (name, n) => {
+  const p = path.join(tmp, name);
+  fs.writeFileSync(p, Array.from({ length: n }, (_, i) => `fn f${i}() { shoelace(); }`).join('\n') + '\n');
+  return p;
+};
+const openView = async (rs) => (await vscode.workspace.openTextDocument(Uri.from({ scheme: 'rbview', path: rs + '.rb' }))).getText();
 
 // ---------------------------------------------------------------- tests
 const ext = require('../extension');
@@ -196,10 +220,8 @@ const { SrcMap } = require('../srcmap');
   }
   ok(rtBad === 0, `${rt} tokens round-trip Ruby→Rust→Ruby`);
 
-  // 8. a reference list spanning another file: mapped in parallel, one `rbview gen` for that file
-  const other = path.join(require('os').tmpdir(), `rbview-test-${process.pid}`, 'other.rs');
-  fs.mkdirSync(path.dirname(other), { recursive: true });
-  fs.writeFileSync(other, Array.from({ length: 30 }, (_, i) => `fn f${i}() { shoelace(); }`).join('\n') + '\n');
+  // 8. a reference list spanning another file: mapped in parallel, one request for that file
+  const other = tmpRs('other.rs', 30);
   const realRefs = fakeRA['vscode.executeReferenceProvider'];
   fakeRA['vscode.executeReferenceProvider'] = (uri, pos) => [
     ...realRefs(uri, pos),
@@ -214,8 +236,8 @@ const { SrcMap } = require('../srcmap');
   const inOther = wide.filter((r) => r.uri.path === other + '.rb');
   ok(inOther.length === 30 && inOther.every((r) => otherRb[r.range.start.line].slice(r.range.start.character, r.range.end.character) === 'shoelace'),
     `references in another file (${inOther.length}) are mapped into its view`);
-  ok(spawned.get(other) === 1, `parallel lookups into one file share one rbview gen (${spawned.get(other)})`);
-  fs.rmSync(path.dirname(other), { recursive: true, force: true });
+  ok(served.get(other) === 1 && !oneShot.has(other), `parallel lookups into one file share one server request (${served.get(other)})`);
+  ok(servers.length === 1 && oneShot.size === 0, `every view so far came from one rbview serve process (${servers.length} started, ${oneShot.size} one-shot)`);
 
   // 9. lookups that fall back to blocks or the nearest line stay cheap in big views: 8x the
   // lookups on an 8x bigger map should take ~8x the time; at O(n) per lookup it's ~64x
@@ -241,6 +263,28 @@ const { SrcMap } = require('../srcmap');
   };
   const ratio = timeLookups(32000) / timeLookups(4000);
   ok(ratio < 24, `fallback lookups scale linearly (8x the map: ${ratio.toFixed(1)}x the time)`);
+
+  // 10. the server dies with requests in flight: they're retried one by one, the next one restarts it
+  const batch = Array.from({ length: 8 }, (_, i) => tmpRs(`batch${i}.rs`, 400));
+  const opened = batch.map(openView);
+  await new Promise((r) => setImmediate(r));
+  servers[servers.length - 1].kill('SIGKILL');
+  const texts = await Promise.all(opened);
+  ok(texts.every((t) => t.includes('def f399')), `all ${texts.length} views open although the server was killed mid-batch (${batch.filter((f) => oneShot.has(f)).length} retried one-shot)`);
+  const after = await openView(tmpRs('after.rs', 3));
+  ok(after.includes('def f2') && servers.length === 2, `the next view starts a new server (${servers.length} started)`);
+
+  // 11. an rbview without `serve` (older than the extension): every view comes from `rbview gen`
+  const legacy = path.join(tmp, 'legacy-rbview');
+  fs.writeFileSync(legacy, `#!/bin/sh\n[ "$1" = serve ] && { echo "usage: rbview gen|build" >&2; exit 2; }\nexec "${BIN}" "$@"\n`, { mode: 0o755 });
+  exeSetting = legacy;
+  const [l1, l2] = [tmpRs('legacy1.rs', 2), tmpRs('legacy2.rs', 2)];
+  const views = [await openView(l1), await openView(l2)];
+  ok(views.every((t) => t.includes('def f1')) && oneShot.get(l1) === 1 && oneShot.get(l2) === 1 && servers.length === 3,
+    'without `serve`, views come from one-shot rbview gen (tried serve once)');
+  exeSetting = BIN;
+  ext.deactivate();
+  fs.rmSync(tmp, { recursive: true, force: true });
 
   console.log(`\n${pass} checks passed`);
 })().catch((e) => { console.error('FAIL:', e.message); process.exit(1); });

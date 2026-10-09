@@ -13,10 +13,11 @@ rbview shows Rust source as a read-only Ruby projection, so Rubyists can read Ru
 | `src/emit.rs` | Rust AST (`syn`) → Ruby text + position map. Most changes land here. The rename tables are at the top |
 | `src/out.rs` | output buffer: UTF-16 position tracking, segments, verbatim lines |
 | `src/range.rs` | source ranges of items, statements and arms read off the syntax tree (for the block map) |
-| `src/lib.rs` / `src/main.rs` | `generate()` / the CLI (`gen`, `build`, `bench`) |
+| `src/lib.rs` / `src/main.rs` | `generate()` / the CLI (`gen`, `build`, `serve`, `bench`) |
 | `src/cache.rs` | the `.rbview/` cache: when a view is reused, symbol kinds, `rbview build` |
+| `src/serve.rs` | `rbview serve`: the long-running process editors ask for views ([spec](docs/spec/serve.md)) |
 | `src/bench.rs` | `rbview bench`: in-process phase timings and output digests ([performance](docs/performance.md)) |
-| `editors/vscode/` | VS Code extension: `extension.js` (providers), `srcmap.js` (position lookup), prebuilt `.vsix`, tests |
+| `editors/vscode/` | VS Code extension: `extension.js` (providers), `server.js` (the `rbview serve` client), `srcmap.js` (position lookup), prebuilt `.vsix`, tests |
 | `tests/golden/` | golden cases (`*.rs` → `*.rb`): the executable translation spec |
 | `tests/corpus/` | the pinned 66-crate regression corpus (fetched, never built) |
 | `docs/` | [intent](docs/intent.md), [specs](docs/spec/), [decision records](docs/decisions/), [testing](docs/testing.md), [performance](docs/performance.md) |
@@ -37,7 +38,7 @@ rbview shows Rust source as a read-only Ruby projection, so Rubyists can read Ru
 
 ## Making a change
 
-1. Find the governing spec: [translation](docs/spec/translation.md), [source map](docs/spec/source-map.md), [cache](docs/spec/cache.md) or [extension](docs/spec/extension.md). If your change contradicts it or a decision record, update those first, or stop and ask.
+1. Find the governing spec: [translation](docs/spec/translation.md), [source map](docs/spec/source-map.md), [cache](docs/spec/cache.md), [server](docs/spec/serve.md) or [extension](docs/spec/extension.md). If your change contradicts it or a decision record, update those first, or stop and ask.
 2. For translation changes, **write or extend a golden case first** (`tests/golden/<area>.rs`), then change `src/emit.rs`.
 3. Run `UPDATE_GOLDEN=1 cargo test --test golden`, then **review `git diff tests/golden` line by line**. An unexplained diff is a bug.
 4. Run `scripts/check.sh`. If you touched `src/emit.rs`, `src/out.rs` or `editors/vscode/srcmap.js`, run `scripts/check.sh --full`.
@@ -68,7 +69,7 @@ cargo build --release && ./target/release/rbview gen path/to/file.rs   # print o
   - `.claude/settings.json` turns off Claude Code's attribution, and its PreToolUse hook blocks `git commit` and `gh pr` commands containing attribution.
   - `scripts/attribution-check.sh --range` checks every commit message and identity in a CI range.
 - **Don't commit** `target/`, `node_modules/` or `.rbview/` (enforced), or scratch files.
-- **The `.vsix`** (`editors/vscode/rbview-0.1.0.vsix`) is what users install. Rebuild it whenever `extension.js`, `srcmap.js` or the extension's `package.json` change (enforced).
+- **The `.vsix`** (`editors/vscode/rbview-0.1.0.vsix`) is what users install. Rebuild it whenever any `editors/vscode/*.js` or the extension's `package.json` changes (enforced).
 - **PRs** fill in `.github/pull_request_template.md`.
 
 ## Gotchas
@@ -79,6 +80,7 @@ cargo build --release && ./target/release/rbview gen path/to/file.rs   # print o
 - **The cache invalidates itself** when anything in `src/` changes (`build.rs` fingerprint). Don't add manual version bumps. `GEN_VERSION` is only for map format changes.
 - **Knowledge from outside the file** (today only `symbols.json` kinds) must go through `Gen::kind_of`, which records it in the map's `deps`. Anything read around it makes cached views go stale silently ([0008](docs/decisions/0008-views-record-their-symbol-kinds.md)).
 - **The demo view** `examples/demo/shapes.rb` must be regenerated after output changes (enforced).
+- **Editors use `rbview serve`**, not `rbview gen`. Both print `View::to_json`; keep it that way, so a view is the same however it's produced. The server keeps nothing in memory but `symbols.json` ([0009](docs/decisions/0009-rbview-serve.md)).
 - **Keep generation linear.** Don't call `to_token_stream()` on items or statements (use `node_range`), look up a span's position once, and never rescan a line or list per token. `scripts/scaling-check.py` fails otherwise ([performance](docs/performance.md)).
 - **Formatting:** rustfmt uses `max_width = 120`. Run `cargo fmt` rather than hand-wrapping.
 - **The live Claude Code hook** blocks any Bash command that contains both `git commit` and attribution text, even a test. Keep such text in fixture files (see `scripts/fixtures/`).

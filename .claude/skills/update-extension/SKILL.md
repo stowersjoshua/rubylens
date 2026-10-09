@@ -1,6 +1,6 @@
 ---
 name: update-extension
-description: Use when changing the VS Code extension in editors/vscode (extension.js, srcmap.js, package.json — commands, settings, providers, keybindings) or when the README's screenshots/GIF need regenerating. Covers tests, rebuilding the committed .vsix, and recapturing media with tools/capture.
+description: Use when changing the VS Code extension in editors/vscode (extension.js, server.js, srcmap.js, package.json — commands, settings, providers, keybindings, the rbview serve client) or when the README's screenshots/GIF need regenerating. Covers tests, rebuilding the committed .vsix, and recapturing media with tools/capture.
 ---
 
 # Change the VS Code extension
@@ -11,6 +11,7 @@ The contract is `docs/spec/extension.md`. The committed `editors/vscode/rbview-0
 
 - **`extension.js`** holds providers and commands. Every language feature must go through VS Code's `vscode.execute*Provider` commands against the Rust document. Never call rust-analyzer directly (decision 0001).
 - **`srcmap.js`** is pure position lookup with no `vscode` import. Its behaviour is specified in `docs/spec/source-map.md` § Lookup.
+- **`server.js`** is the `rbview serve` client, also free of `vscode`. Every request it can't get answered must fail with `ServerGone` so `extension.js` retries it with `rbview gen` (`docs/spec/serve.md` § Clients). Test a change with the crash and no-`serve` cases in `test/run.js`.
 - **`package.json`**: new commands, settings and keybindings also go in the tables in `docs/spec/extension.md` and the README's Use section.
 
 ## 2. Test

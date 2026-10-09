@@ -12,6 +12,7 @@ Short records of choices that shape rbview, so nobody (human or agent) has to re
 | [0006](0006-deterministic-core.md) | The view is deterministic; no generated prose in the core path | Accepted |
 | [0007](0007-allocator-and-release-profile.md) | mimalloc and a link-time-optimized release build | Accepted |
 | [0008](0008-views-record-their-symbol-kinds.md) | Cached views record the symbol kinds they relied on | Accepted |
+| [0009](0009-rbview-serve.md) | Editors talk to a long-running `rbview serve` | Accepted |
 
 ## When to write one
 

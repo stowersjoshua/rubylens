@@ -11,6 +11,7 @@ const cp = require('child_process');
 const os = require('os');
 const path = require('path');
 const { SrcMap } = require('./srcmap');
+const { GenServer, ServerGone } = require('./server');
 
 const SCHEME = 'rbview';
 /** rbview uri string -> { map: SrcMap, version } */
@@ -36,7 +37,19 @@ function rootFor(rsUri) {
   return wf ? wf.uri.fsPath : path.dirname(rsUri.fsPath);
 }
 
-/** At most this many `rbview gen` processes at once (a reference list can span hundreds of files). */
+/** The `rbview serve` process for the configured executable (a new one if the setting changes). */
+let server = null;
+
+function genServer() {
+  const e = exe();
+  if (!server || server.exe !== e) {
+    if (server) server.stop();
+    server = new GenServer(e, (line) => output.appendLine(line));
+  }
+  return server;
+}
+
+/** At most this many one-shot `rbview gen` processes at once (a reference list can span hundreds of files). */
 const MAX_GEN = Math.max(2, os.cpus().length);
 let running = 0;
 const waiting = [];
@@ -53,7 +66,13 @@ async function limited(job) {
   }
 }
 
-function runGen(rsUri) {
+/** The view and map for a Rust file, from the server, or from `rbview gen` if the server can't answer. */
+async function runGen(rsUri) {
+  try {
+    return await genServer().request({ method: 'gen', file: rsUri.fsPath, root: rootFor(rsUri) });
+  } catch (e) {
+    if (!(e instanceof ServerGone)) throw e;
+  }
   return limited(() => spawnGen(rsUri));
 }
 
@@ -287,6 +306,8 @@ function activate(context) {
   );
 }
 
-function deactivate() {}
+function deactivate() {
+  if (server) server.stop();
+}
 
 module.exports = { activate, deactivate };

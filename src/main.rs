@@ -2,11 +2,12 @@
 //!
 //!   rbview gen <file.rs> [--root DIR] [--json] [--no-cache]
 //!   rbview build [DIR] [--force]
+//!   rbview serve [--idle-exit SECS]
 //!
 //! Generated views, position maps and a crate-wide symbol index live in a
 //! hidden `.rbview/` folder at the repo root (like `.git` or `.idea`).
 
-use rbview::{CACHE_DIR, Kinds, cmd_build, find_root, gen_cached};
+use rbview::{CACHE_DIR, Kinds, cmd_build, gen_cached, resolve};
 use std::path::PathBuf;
 
 fn usage() -> ! {
@@ -15,6 +16,7 @@ fn usage() -> ! {
          USAGE:\n  \
          rbview gen <file.rs> [--root DIR] [--json] [--no-cache]   print the Ruby view of one file\n  \
          rbview build [DIR] [--force]                              pre-generate views for every .rs file\n  \
+         rbview serve [--idle-exit SECS]                           answer gen requests over stdin/stdout (for editors)\n  \
          rbview bench <file-or-dir>... [--repeat N] [--top K] [--digest FILE]   in-process benchmark\n\n\
          Views are cached in <repo>/.rbview/ (self-gitignored)."
     );
@@ -47,27 +49,15 @@ fn main() {
     match cmd.as_str() {
         "gen" => {
             let Some(file) = positional.first() else { usage() };
-            let file = PathBuf::from(file).canonicalize().unwrap_or_else(|e| {
+            let root = opt("--root").map(PathBuf::from);
+            let (file, root) = resolve(&PathBuf::from(file), root.as_deref()).unwrap_or_else(|e| {
                 eprintln!("rbview: {file}: {e}");
                 std::process::exit(1)
             });
-            let root = opt("--root").map(PathBuf::from).unwrap_or_else(|| find_root(&file));
-            let root = root.canonicalize().unwrap_or(root);
             let kinds = Kinds::lazy(&root.join(CACHE_DIR));
             match gen_cached(&file, &root, &kinds, !flag("--no-cache")) {
-                Ok(v) => {
-                    if flag("--json") {
-                        println!(
-                            "{{\"rbPath\":{},\"cached\":{},\"ruby\":{},\"map\":{}}}",
-                            serde_json::to_string(&v.rb_path.to_string_lossy()).unwrap(),
-                            v.cached,
-                            serde_json::to_string(&v.ruby).unwrap(),
-                            v.map_json
-                        );
-                    } else {
-                        print!("{}", v.ruby);
-                    }
-                }
+                Ok(v) if flag("--json") => println!("{}", v.to_json()),
+                Ok(v) => print!("{}", v.ruby),
                 Err(e) => {
                     eprintln!("rbview: {e}");
                     std::process::exit(1)
@@ -79,6 +69,7 @@ fn main() {
             eprintln!("{}", cmd_build(&dir, flag("--force")));
         }
         "bench" => rbview::bench::run(&args[1..]),
+        "serve" => rbview::serve::run(&args[1..]),
         _ => usage(),
     }
 }

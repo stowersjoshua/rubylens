@@ -39,6 +39,7 @@ The cache lives in `<root>/.rbview/`, where `<root>` is the first match of:
 | Command | Effect |
 |---|---|
 | `rbview gen <file.rs> [--root DIR] [--json] [--no-cache]` | one view. Prints Ruby, or JSON with `--json` |
+| `rbview serve [--idle-exit SECS]` | answers `gen` requests from editors over stdin/stdout, with the same cache rules ([serve.md](serve.md)) |
 | `rbview build [DIR] [--force]` | every `.rs` under `DIR`, in parallel, biggest files first. Pass 1 brings each view up to date against the `symbols.json` of the last build and collects the types each file defines (from `index.json` when the file is unchanged), parsing each file at most once. Then `index.json` and `symbols.json` are written. Pass 2 regenerates only the views that relied on a kind that just changed. `--force` regenerates everything. Entries for files outside `DIR` are kept, so building a subfolder doesn't forget the rest of the repo |
 
 ## Rules

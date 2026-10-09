@@ -37,6 +37,7 @@ First run in a fresh clone? `scripts/setup.sh` enables the git hooks and install
 | navigation | jumps land wrong against real rust-analyzer | `debug-navigation` skill |
 | generation scales linearly | some input shape got superlinear (the failing case says which) | find the per-token or per-level rescan (`improve-performance` skill); never raise `MAX_RATIO` |
 | cache tests | a view is reused when stale, regenerated when fresh, or written non-atomically | read `docs/spec/cache.md`; anything the emitter learns from outside the file goes through `Gen::kind_of` |
+| server tests | `rbview serve` answers differently from `rbview gen --json`, mixes up ids, keeps stale state, or doesn't exit when it should | `docs/spec/serve.md`; both commands must go through `View::to_json`, and the server keeps nothing but `symbols.json` |
 
 ## Never
 

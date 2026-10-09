@@ -48,6 +48,19 @@ What changed ([0008](decisions/0008-views-record-their-symbol-kinds.md)):
 - `build` read every cached view and map in full to compare a hash. Now it reads the first few KB of the map.
 - Worker threads drop proc-macro2's per-thread line tables after each file. Otherwise they grow with every file the thread parses.
 
+## Views in the editor: one process for the session
+
+The editor asks one long-running `rbview serve` for every view instead of starting `rbview gen` each time ([0009](decisions/0009-rbview-serve.md)). Round trips on the same 2-core machine, built cache, median of 30 (client-side JSON parsing not included):
+
+| | One `rbview gen` per view | `rbview serve` |
+|---|---|---|
+| tokio `sync/oneshot.rs`: hit / miss | 2.3 / 8.0 ms | 0.45 / 5.4 ms |
+| corpus, anyhow `lib.rs`: hit / miss | 3.5 / 6.2 ms | 0.20 / 2.6 ms |
+| corpus, syn `expr.rs`: hit / miss | 4.7 / 25 ms | 1.5 / 22 ms |
+| 50 tokio views at once (a long reference list), hits | 68 ms (2 processes at a time) | 3.2 ms |
+
+The server saves the process start (about 2 ms) and keeps each repo's `symbols.json` loaded (the 15,000-name corpus table costs about 1 ms per process). Misses are mostly generation, so they gain less.
+
 ## Measuring
 
 ```sh

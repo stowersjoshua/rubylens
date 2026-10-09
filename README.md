@@ -53,6 +53,7 @@ Requires the rust-analyzer VS Code extension.
 - **CLI:**
   - `rbview gen src/foo.rs` prints one view.
   - `rbview build` pre-generates every `.rs` file in the repo.
+  - `rbview serve` answers view requests over stdin/stdout. The extension starts it for you, so views open without starting a process each time.
 
 ## Screenshots
 
@@ -97,10 +98,10 @@ Speed, measured on tokio (555 files):
 
 | | |
 |---|---|
-| Cold `rbview build` | 0.36 s |
-| Warm `rbview build` (nothing changed) | 0.016 s |
-| Single 1,600-line file, uncached | 8 ms |
-| Single 1,600-line file, cached | 2.6 ms |
+| Cold `rbview build` | 0.38 s |
+| Warm `rbview build` (nothing changed) | 0.02 s |
+| One 1,600-line file, uncached: `rbview gen` / in the editor | 8 ms / 5.4 ms |
+| One 1,600-line file, cached: `rbview gen` / in the editor | 2.3 ms / 0.45 ms |
 
 [docs/performance.md](docs/performance.md) has the details, how to measure, and the rules that keep it fast.
 
