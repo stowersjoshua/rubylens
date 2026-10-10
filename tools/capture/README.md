@@ -1,6 +1,6 @@
 # Capturing the demo media
 
-`capture.sh` regenerates everything in `docs/media/`: the README's GIF and screenshots.
+`capture.sh` regenerates the README's GIF and screenshots in `docs/media/`. The logo in `docs/media/logo/` isn't captured ([its README](../../docs/media/logo/README.md)).
 
 It runs the real RubyLens extension in a real VS Code (code-server, VS Code in the browser) against a real rust-analyzer. A headless Chromium then clicks through the demo, and ffmpeg assembles the GIF. Everything runs in a throwaway profile under a temp folder, so your own VS Code settings and extensions are untouched.
 

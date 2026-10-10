@@ -1,3 +1,10 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/media/logo/rubylens-logo-dark.svg">
+    <img src="docs/media/logo/rubylens-logo.svg" alt="RubyLens" height="72">
+  </picture>
+</p>
+
 # RubyLens: read Rust as Ruby
 
 **RubyLens** lets you read Rust through a Ruby lens. It turns Rust source into a **read-only Ruby projection**. The editor extension lets you browse it with normal IDE navigation (go to definition, hover, references, outline), all answered by rust-analyzer. The Ruby isn't meant to run. It's there so you can read what a Rust black box is doing in a language you think in.

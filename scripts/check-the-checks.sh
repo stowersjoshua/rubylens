@@ -55,6 +55,10 @@ echo "6. extension source edited without rebuilding the .vsix"
 printf '\n// tweak\n' >> editors/vscode/extension.js
 caught ".vsix matches source" "^\\.vsix matches source +✗" scripts/check.sh
 
+echo "6b. extension icon replaced without rebuilding the .vsix"
+printf 'x' >> editors/vscode/icon.png
+caught ".vsix matches source (icon)" "stale for: icon\\.png" scripts/check.sh
+
 echo "7. a commit that credits an AI tool"
 printf 'x\n' > note.txt && git add note.txt
 caught "commit-msg hook" "contains AI attribution" git commit -q -F scripts/fixtures/commit-msg-attributed.txt

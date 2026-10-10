@@ -5,6 +5,8 @@
   "version": "0.1.0",
   "publisher": "local",
   "license": "MIT",
+  "icon": "icon.png",
+  "galleryBanner": { "color": "#15121A", "theme": "dark" },
   "engines": { "vscode": "^1.85.0" },
   "categories": ["Programming Languages", "Other"],
   "main": "./extension.js",

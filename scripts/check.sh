@@ -34,10 +34,12 @@ tracked_junk() {
 vsix_in_sync() {
   # The committed .vsix is what users install; it must contain the current extension source.
   python3 - <<'PY'
-import glob, os, sys, zipfile
+import glob, json, os, sys, zipfile
 z = zipfile.ZipFile("editors/vscode/rubylens-0.1.0.vsix")
 shipped = set(z.namelist())
-source = ["package.json"] + sorted(os.path.basename(p) for p in glob.glob("editors/vscode/*.js"))
+icon = json.load(open("editors/vscode/package.json")).get("icon")
+source = (["package.json"] + ([icon] if icon else [])
+          + sorted(os.path.basename(p) for p in glob.glob("editors/vscode/*.js")))
 bad = [f for f in source
        if "extension/" + f not in shipped or z.read("extension/" + f) != open("editors/vscode/" + f, "rb").read()]
 if bad:
@@ -56,7 +58,8 @@ bad = []
 for md in subprocess.run(["git", "ls-files", "*.md"], capture_output=True, text=True).stdout.split():
     text = re.sub(r"```.*?```", "", open(md, encoding="utf-8").read(), flags=re.S)  # skip code blocks
     text = re.sub(r"`[^`\n]*`", "", text)  # and inline code
-    for target in re.findall(r"\]\(([^)\s]+)\)", text):
+    # markdown links, and images in inline HTML (<img src>, <picture> <source srcset>)
+    for target in re.findall(r"\]\(([^)\s]+)\)", text) + re.findall(r'\b(?:src|srcset)="([^"\s]+)"', text):
         if re.match(r"^[a-z]+:|^#", target):
             continue
         path = os.path.normpath(os.path.join(os.path.dirname(md), target.split("#")[0]))
