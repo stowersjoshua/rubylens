@@ -140,7 +140,7 @@ pub enum Kind {
     Trait,
 }
 
-/// Type name -> kind. `rbview gen` loads the crate-wide table (`symbols.json`, tens of thousands of
+/// Type name -> kind. `rubylens gen` loads the crate-wide table (`symbols.json`, tens of thousands of
 /// names in a big repo) on every run, and SipHash was most of that cost; FNV is plenty for short
 /// identifiers from the reader's own files.
 pub type KindMap = HashMap<String, Kind, BuildHasherDefault<Fnv>>;
@@ -168,7 +168,7 @@ impl Hasher for Fnv {
 
 pub struct Gen<'a> {
     pub out: Out,
-    /// Crate-wide knowledge (from .rbview/symbols.json + this file): type name -> kind.
+    /// Crate-wide knowledge (from .rubylens/symbols.json + this file): type name -> kind.
     pub kinds: &'a KindMap,
     /// Every crate-wide kind the view relied on (name -> kind, None if unknown). Stored in the map
     /// so a cached view is regenerated when `symbols.json` changes what it assumed.
@@ -540,7 +540,7 @@ impl<'a> Gen<'a> {
         crate::collect_kinds(&f.items, &mut self.local_kinds);
 
         self.out.push("# frozen_string_literal: true\n");
-        self.out.push("# rbview: read-only Ruby projection of Rust source. Not executable.\n");
+        self.out.push("# RubyLens: read-only Ruby projection of Rust source. Not executable.\n");
         self.attrs(&f.attrs);
         if !module_path.is_empty() {
             self.out.push("module ");

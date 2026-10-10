@@ -1,6 +1,6 @@
 ## What and why
 
-<!-- What changes for someone reading Rust through rbview, and why. Link the spec section or decision record. -->
+<!-- What changes for someone reading Rust through RubyLens, and why. Link the spec section or decision record. -->
 
 ## Golden diff
 

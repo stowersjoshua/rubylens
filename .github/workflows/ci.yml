@@ -29,11 +29,11 @@ jobs:
       - name: Commit range to check for attribution
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            echo "RBVIEW_CHECK_RANGE=${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}" >> "$GITHUB_ENV"
+            echo "RUBYLENS_CHECK_RANGE=${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}" >> "$GITHUB_ENV"
           elif [ "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]; then
-            echo "RBVIEW_CHECK_RANGE=${{ github.event.before }}..${{ github.sha }}" >> "$GITHUB_ENV"
+            echo "RUBYLENS_CHECK_RANGE=${{ github.event.before }}..${{ github.sha }}" >> "$GITHUB_ENV"
           else
-            echo "RBVIEW_CHECK_RANGE=$(git rev-list --max-parents=0 HEAD | tail -1)..${{ github.sha }}" >> "$GITHUB_ENV"
+            echo "RUBYLENS_CHECK_RANGE=$(git rev-list --max-parents=0 HEAD | tail -1)..${{ github.sha }}" >> "$GITHUB_ENV"
           fi
 
       - name: scripts/check.sh --full

@@ -1,8 +1,8 @@
-//! The `.rbview/` cache (docs/spec/cache.md): a view is reused exactly when it's still right.
+//! The `.rubylens/` cache (docs/spec/cache.md): a view is reused exactly when it's still right.
 //!
 //! Each test builds a small throwaway repo, so these never touch the real cache.
 
-use rbview::{CACHE_DIR, Kinds, cmd_build, gen_cached};
+use rubylens::{CACHE_DIR, Kinds, cmd_build, gen_cached};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -10,7 +10,7 @@ struct Repo(PathBuf);
 
 impl Repo {
     fn new(name: &str) -> Repo {
-        let dir = std::env::temp_dir().join(format!("rbview-cache-test-{name}-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("rubylens-cache-test-{name}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(dir.join("src")).unwrap();
         fs::write(dir.join("Cargo.toml"), "[package]\nname = \"t\"\n").unwrap();
@@ -31,7 +31,7 @@ impl Repo {
         fs::read_to_string(rb).unwrap()
     }
 
-    fn open(&self, file: &Path) -> rbview::View {
+    fn open(&self, file: &Path) -> rubylens::View {
         gen_cached(file, &self.0, &Kinds::lazy(&self.0.join(CACHE_DIR)), true).unwrap()
     }
 }

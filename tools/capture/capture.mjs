@@ -1,4 +1,4 @@
-// Drives VS Code (code-server) through an rbview demo, saving stills and an animated GIF.
+// Drives VS Code (code-server) through a RubyLens demo, saving stills and an animated GIF.
 //
 //   node capture.mjs --url http://127.0.0.1:8737 --workspace <dir> --out <dir> [--publish <dir>]
 //
@@ -179,6 +179,8 @@ await page.goto(`${URL_BASE}/?folder=${encodeURIComponent(WS)}`, { waitUntil: 'n
 await page.waitForSelector('.monaco-workbench', { timeout: 90000 });
 await sleep(3000);
 await installPointer();
+// VS Code's own toasts (slow-machine warnings, tips) aren't part of the demo
+await page.addStyleTag({ content: '.notifications-toasts { display: none !important; }' });
 await page.mouse.move(mx, my);
 
 log('opening shapes.rs; waiting for rust-analyzer');
@@ -194,7 +196,7 @@ await frame(1600, 'rust-source');
 
 // 2. Open the Ruby view beside it (cursor follows)
 log('open as Ruby');
-await command('rbview: Open as Ruby');
+await command('RubyLens: Open as Ruby');
 await lineMatches('def total_area');
 await sleep(1200);
 await frame(2600, 'open-as-ruby');
@@ -221,7 +223,7 @@ await quickOpen('main.rs');
 await sleep(600);
 await gotoLine(lineOf(`${WS}/src/main.rs`, 'VersionReq::parse'));
 await clickToken(0, 'parse', 'VersionReq::parse');
-await command('rbview: Open as Ruby');
+await command('RubyLens: Open as Ruby');
 await lineMatches('VersionReq\\.parse');
 await sleep(1000);
 await frame(1800, 'main-as-ruby');
@@ -242,7 +244,7 @@ await command('View: Close All Editors in Group'); // make room: Ruby + Rust sid
 await sleep(1000);
 await key('Control+Digit1');
 await sleep(400);
-await command('rbview: Show Rust Source');
+await command('RubyLens: Show Rust Source');
 await lineMatches('pub fn parse\\(');
 await sleep(1000);
 await frame(3000, 'dependency-source');
@@ -255,13 +257,13 @@ fs.writeFileSync(`${OUT}/frames.txt`, list);
 execFileSync('ffmpeg', [
   '-v', 'error', '-y', '-f', 'concat', '-safe', '0', '-i', `${OUT}/frames.txt`,
   '-vf', 'fps=12,scale=1200:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=160:stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=4:diff_mode=rectangle',
-  '-loop', '0', `${OUT}/rbview-demo.gif`,
+  '-loop', '0', `${OUT}/rubylens-demo.gif`,
 ]);
-log(`wrote ${OUT}/rbview-demo.gif`);
+log(`wrote ${OUT}/rubylens-demo.gif`);
 
 if (PUBLISH) {
   fs.mkdirSync(PUBLISH, { recursive: true });
-  for (const f of ['rbview-demo.gif', 'open-as-ruby.png', 'hover.png', 'hover-into-dependency.png', 'dependency-source.png']) {
+  for (const f of ['rubylens-demo.gif', 'open-as-ruby.png', 'hover.png', 'hover-into-dependency.png', 'dependency-source.png']) {
     fs.copyFileSync(`${OUT}/${f}`, path.join(PUBLISH, f));
   }
   log(`published to ${PUBLISH}`);

@@ -1,15 +1,15 @@
-//! `rbview serve`: answers view requests over stdin/stdout, so an editor keeps one rbview process
+//! `rubylens serve`: answers view requests over stdin/stdout, so an editor keeps one RubyLens process
 //! instead of starting one per view. The protocol is in `docs/spec/serve.md`.
 //!
 //! One JSON request per line in, one JSON response per line out, matched by `id`. Requests run
 //! in parallel on every core, so responses can arrive in any order. The process holds no state
-//! that can go stale: views live in `.rbview/` exactly as with `rbview gen`, and the only thing
+//! that can go stale: views live in `.rubylens/` exactly as with `rubylens gen`, and the only thing
 //! kept in memory, each root's `symbols.json`, is reloaded whenever that file changes.
 //!
 //! It exits when stdin closes, after `--idle-exit` seconds with nothing to do (default 600; 0
 //! never), or when its own binary is replaced, so an upgrade takes effect without restarting the
 //! editor. Requests it didn't answer are the client's to retry (the VS Code extension falls back
-//! to `rbview gen`).
+//! to `rubylens gen`).
 
 use crate::GEN_VERSION;
 use crate::cache::{CACHE_DIR, Kinds, gen_cached, resolve};
@@ -70,7 +70,7 @@ impl KindsByRoot {
 fn answer(req: &Value, kinds: &KindsByRoot) -> Result<String, String> {
     let field = |k: &str| req.get(k).and_then(Value::as_str);
     match field("method") {
-        Some("ping") => Ok(format!("{{\"version\":{GEN_VERSION},\"build\":\"{}\"}}", env!("RBVIEW_BUILD_ID"))),
+        Some("ping") => Ok(format!("{{\"version\":{GEN_VERSION},\"build\":\"{}\"}}", env!("RUBYLENS_BUILD_ID"))),
         Some("gen") => {
             let file = field("file").ok_or("a gen request needs \"file\"")?;
             let (file, root) =
@@ -97,7 +97,7 @@ fn respond(line: &str, kinds: &KindsByRoot) -> String {
                     .map(String::as_str)
                     .or_else(|| panic.downcast_ref::<&str>().copied())
                     .unwrap_or("unknown panic");
-                Err(format!("rbview failed on this request: {msg}"))
+                Err(format!("rubylens failed on this request: {msg}"))
             });
             (id, result)
         }
@@ -117,14 +117,14 @@ pub fn run(args: &[String]) {
         match args[i].as_str() {
             "--idle-exit" => {
                 let secs = args.get(i + 1).and_then(|s| s.parse().ok()).unwrap_or_else(|| {
-                    eprintln!("rbview serve: --idle-exit needs a number of seconds");
+                    eprintln!("rubylens serve: --idle-exit needs a number of seconds");
                     std::process::exit(2)
                 });
                 idle_exit = Duration::from_secs(secs);
                 i += 1;
             }
             other => {
-                eprintln!("rbview serve: unknown option {other}");
+                eprintln!("rubylens serve: unknown option {other}");
                 std::process::exit(2)
             }
         }
@@ -182,7 +182,7 @@ pub fn run(args: &[String]) {
                 continue;
             }
             if exe_stamp.is_some() && exe.as_deref().and_then(stamp) != exe_stamp {
-                eprintln!("rbview serve: the rbview binary was replaced; exiting so the new one is used");
+                eprintln!("rubylens serve: the rubylens binary was replaced; exiting so the new one is used");
                 break;
             }
             busy.fetch_add(1, Ordering::SeqCst);

@@ -1,6 +1,6 @@
 ---
 name: verify-changes
-description: Use before committing or declaring any change to rbview done, or when a check in scripts/check.sh fails and you need to know what it means and how to fix it properly (without weakening the check).
+description: Use before committing or declaring any change to RubyLens done, or when a check in scripts/check.sh fails and you need to know what it means and how to fix it properly (without weakening the check).
 ---
 
 # Verify a change
@@ -27,7 +27,7 @@ First run in a fresh clone? `scripts/setup.sh` enables the git hooks and install
 | golden snapshots differ | output changed | if intended: `UPDATE_GOLDEN=1 cargo test --test golden` and review `git diff tests/golden`; if not: you broke something |
 | map: wrong identifier | a token maps to a different Rust identifier | an intended rename goes in the tables in `src/emit.rs`; otherwise see the `debug-navigation` skill |
 | map: coverage below 95% | Rust identifiers became unreachable | emit them with `span_tok`/`src_tokens`; never lower `MIN_COVERAGE` |
-| not valid Ruby | a rendering broke Ruby syntax | fix it; mark the case `rbview-golden: ruby-invalid (reason)` only for genuine Ruby limitations (decision 0002) |
+| not valid Ruby | a rendering broke Ruby syntax | fix it; mark the case `rubylens-golden: ruby-invalid (reason)` only for genuine Ruby limitations (decision 0002) |
 | spec linkage | a golden case is uncited, or a citation is missing | cite or add it in `docs/spec/translation.md` |
 | attribution guards / commits | a commit message credits an AI tool | `git commit --amend` (or rebase) to remove the lines |
 | .vsix matches source | the extension source changed without a rebuild | rebuild (the step prints the command) |
@@ -37,7 +37,7 @@ First run in a fresh clone? `scripts/setup.sh` enables the git hooks and install
 | navigation | jumps land wrong against real rust-analyzer | `debug-navigation` skill |
 | generation scales linearly | some input shape got superlinear (the failing case says which) | find the per-token or per-level rescan (`improve-performance` skill); never raise `MAX_RATIO` |
 | cache tests | a view is reused when stale, regenerated when fresh, or written non-atomically | read `docs/spec/cache.md`; anything the emitter learns from outside the file goes through `Gen::kind_of` |
-| server tests | `rbview serve` answers differently from `rbview gen --json`, mixes up ids, keeps stale state, or doesn't exit when it should | `docs/spec/serve.md`; both commands must go through `View::to_json`, and the server keeps nothing but `symbols.json` |
+| server tests | `rubylens serve` answers differently from `rubylens gen --json`, mixes up ids, keeps stale state, or doesn't exit when it should | `docs/spec/serve.md`; both commands must go through `View::to_json`, and the server keeps nothing but `symbols.json` |
 
 ## Never
 

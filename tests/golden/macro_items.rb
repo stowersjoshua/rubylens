@@ -1,5 +1,5 @@
 # frozen_string_literal: true
-# rbview: read-only Ruby projection of Rust source. Not executable.
+# RubyLens: read-only Ruby projection of Rust source. Not executable.
 # macro definition (Rust, verbatim):
 #   macro_rules! cfg_fast {
 #       ($($item:item)*) => {

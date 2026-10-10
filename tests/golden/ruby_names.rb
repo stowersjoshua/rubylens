@@ -1,5 +1,5 @@
 # frozen_string_literal: true
-# rbview: read-only Ruby projection of Rust source. Not executable.
+# RubyLens: read-only Ruby projection of Rust source. Not executable.
 # #[allow(non_camel_case_types)]
 class Timeval
   attr_accessor :tv_sec  # i64

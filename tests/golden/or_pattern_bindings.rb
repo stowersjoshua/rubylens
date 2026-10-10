@@ -1,5 +1,5 @@
 # frozen_string_literal: true
-# rbview: read-only Ruby projection of Rust source. Not executable.
+# RubyLens: read-only Ruby projection of Rust source. Not executable.
 module Either  # enum
   Left = Data.define(:_0) { include Either }  # (i32)
   Right = Data.define(:_0) { include Either }  # (i32)

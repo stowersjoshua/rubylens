@@ -1,24 +1,24 @@
-//! rbview — read Rust code as Ruby.
+//! RubyLens — read Rust code as Ruby.
 //!
-//!   rbview gen <file.rs> [--root DIR] [--json] [--no-cache]
-//!   rbview build [DIR] [--force]
-//!   rbview serve [--idle-exit SECS]
+//!   rubylens gen <file.rs> [--root DIR] [--json] [--no-cache]
+//!   rubylens build [DIR] [--force]
+//!   rubylens serve [--idle-exit SECS]
 //!
 //! Generated views, position maps and a crate-wide symbol index live in a
-//! hidden `.rbview/` folder at the repo root (like `.git` or `.idea`).
+//! hidden `.rubylens/` folder at the repo root (like `.git` or `.idea`).
 
-use rbview::{CACHE_DIR, Kinds, cmd_build, gen_cached, resolve};
+use rubylens::{CACHE_DIR, Kinds, cmd_build, gen_cached, resolve};
 use std::path::PathBuf;
 
 fn usage() -> ! {
     eprintln!(
-        "rbview — read Rust code as Ruby\n\n\
+        "RubyLens — read Rust code as Ruby\n\n\
          USAGE:\n  \
-         rbview gen <file.rs> [--root DIR] [--json] [--no-cache]   print the Ruby view of one file\n  \
-         rbview build [DIR] [--force]                              pre-generate views for every .rs file\n  \
-         rbview serve [--idle-exit SECS]                           answer gen requests over stdin/stdout (for editors)\n  \
-         rbview bench <file-or-dir>... [--repeat N] [--top K] [--digest FILE]   in-process benchmark\n\n\
-         Views are cached in <repo>/.rbview/ (self-gitignored)."
+         rubylens gen <file.rs> [--root DIR] [--json] [--no-cache]   print the Ruby view of one file\n  \
+         rubylens build [DIR] [--force]                              pre-generate views for every .rs file\n  \
+         rubylens serve [--idle-exit SECS]                           answer gen requests over stdin/stdout (for editors)\n  \
+         rubylens bench <file-or-dir>... [--repeat N] [--top K] [--digest FILE]   in-process benchmark\n\n\
+         Views are cached in <repo>/.rubylens/ (self-gitignored)."
     );
     std::process::exit(2)
 }
@@ -51,7 +51,7 @@ fn main() {
             let Some(file) = positional.first() else { usage() };
             let root = opt("--root").map(PathBuf::from);
             let (file, root) = resolve(&PathBuf::from(file), root.as_deref()).unwrap_or_else(|e| {
-                eprintln!("rbview: {file}: {e}");
+                eprintln!("rubylens: {file}: {e}");
                 std::process::exit(1)
             });
             let kinds = Kinds::lazy(&root.join(CACHE_DIR));
@@ -59,7 +59,7 @@ fn main() {
                 Ok(v) if flag("--json") => println!("{}", v.to_json()),
                 Ok(v) => print!("{}", v.ruby),
                 Err(e) => {
-                    eprintln!("rbview: {e}");
+                    eprintln!("rubylens: {e}");
                     std::process::exit(1)
                 }
             }
@@ -68,8 +68,8 @@ fn main() {
             let dir = positional.first().map(PathBuf::from).unwrap_or_else(|| PathBuf::from("."));
             eprintln!("{}", cmd_build(&dir, flag("--force")));
         }
-        "bench" => rbview::bench::run(&args[1..]),
-        "serve" => rbview::serve::run(&args[1..]),
+        "bench" => rubylens::bench::run(&args[1..]),
+        "serve" => rubylens::serve::run(&args[1..]),
         _ => usage(),
     }
 }

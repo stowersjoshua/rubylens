@@ -1,6 +1,6 @@
 // End-to-end test of the extension's mapping pipeline without VS Code:
 // a mock `vscode` module plus a toy "rust-analyzer" that resolves definitions
-// by scanning the Rust source. Run: node test/run.js <path-to-rbview-binary>
+// by scanning the Rust source. Run: node test/run.js <path-to-rubylens-binary>
 'use strict';
 
 const fs = require('fs');
@@ -8,7 +8,7 @@ const path = require('path');
 const Module = require('module');
 const assert = require('assert');
 
-const BIN = process.argv[2] || path.resolve(__dirname, '../../../target/release/rbview');
+const BIN = process.argv[2] || path.resolve(__dirname, '../../../target/release/rubylens');
 const DEMO = path.resolve(__dirname, '../../../examples/demo');
 const RS = path.join(DEMO, 'src/shapes.rs');
 
@@ -32,7 +32,7 @@ class Uri {
   static file(p) { return new Uri('file', p); }
   toString() { return `${this.scheme}:${this.path}`; }
 }
-let exeSetting = BIN; // the rbview.executable setting
+let exeSetting = BIN; // the rubylens.executable setting
 const providers = {};
 let contentProvider;
 const docs = new Map();
@@ -103,8 +103,8 @@ const vscode = {
     registerTextDocumentContentProvider: (_s, p) => { contentProvider = p; return {}; },
     openTextDocument: async (uri) => {
       if (!docs.has(uri.toString())) {
-        const text = uri.scheme === 'rbview' ? await contentProvider.provideTextDocumentContent(uri) : fs.readFileSync(uri.fsPath, 'utf8');
-        docs.set(uri.toString(), { uri, getText: () => text, languageId: uri.scheme === 'rbview' ? 'ruby' : 'rust' });
+        const text = uri.scheme === 'rubylens' ? await contentProvider.provideTextDocumentContent(uri) : fs.readFileSync(uri.fsPath, 'utf8');
+        docs.set(uri.toString(), { uri, getText: () => text, languageId: uri.scheme === 'rubylens' ? 'ruby' : 'rust' });
       }
       return docs.get(uri.toString());
     },
@@ -123,7 +123,7 @@ const vscode = {
 const origLoad = Module._load;
 Module._load = function (req, ...rest) { return req === 'vscode' ? vscode : origLoad.call(this, req, ...rest); };
 
-// count how each view is produced: requests to `rbview serve` and one-shot `rbview gen` runs
+// count how each view is produced: requests to `rubylens serve` and one-shot `rubylens gen` runs
 const cp = require('child_process');
 const count = (m, k) => m.set(k, (m.get(k) || 0) + 1);
 const served = new Map();
@@ -147,13 +147,13 @@ cp.spawn = function (file, args, ...rest) {
   }
   return child;
 };
-const tmp = fs.mkdtempSync(path.join(require('os').tmpdir(), 'rbview-test-'));
+const tmp = fs.mkdtempSync(path.join(require('os').tmpdir(), 'rubylens-test-'));
 const tmpRs = (name, n) => {
   const p = path.join(tmp, name);
   fs.writeFileSync(p, Array.from({ length: n }, (_, i) => `fn f${i}() { shoelace(); }`).join('\n') + '\n');
   return p;
 };
-const openView = async (rs) => (await vscode.workspace.openTextDocument(Uri.from({ scheme: 'rbview', path: rs + '.rb' }))).getText();
+const openView = async (rs) => (await vscode.workspace.openTextDocument(Uri.from({ scheme: 'rubylens', path: rs + '.rb' }))).getText();
 
 // ---------------------------------------------------------------- tests
 const ext = require('../extension');
@@ -161,7 +161,7 @@ const { SrcMap } = require('../srcmap');
 
 (async () => {
   ext.activate({ subscriptions: [] });
-  const rbUri = Uri.from({ scheme: 'rbview', path: RS + '.rb' });
+  const rbUri = Uri.from({ scheme: 'rubylens', path: RS + '.rb' });
   const doc = await vscode.workspace.openTextDocument(rbUri);
   const rb = doc.getText().split('\n');
   const find = (needle, nth = 0) => {
@@ -178,7 +178,7 @@ const { SrcMap } = require('../srcmap');
   // 1. go to definition: call site `shoelace(points)` -> `def self.shoelace`
   const call = find('shoelace(points)');
   let defs = await providers.registerDefinitionProvider.provideDefinition(doc, call);
-  ok(defs.length === 1 && defs[0].targetUri.scheme === 'rbview', 'definition resolves into a Ruby view');
+  ok(defs.length === 1 && defs[0].targetUri.scheme === 'rubylens', 'definition resolves into a Ruby view');
   const tgt = defs[0].targetSelectionRange;
   ok(rb[tgt.start.line].includes('def self.shoelace'), `definition lands on "${rb[tgt.start.line].trim()}"`);
   ok(rb[tgt.start.line].slice(tgt.start.character, tgt.end.character) === 'shoelace', 'target selection is exactly the name');
@@ -232,12 +232,12 @@ const { SrcMap } = require('../srcmap');
   ];
   const wide = await providers.registerReferenceProvider.provideReferences(doc, call, {});
   fakeRA['vscode.executeReferenceProvider'] = realRefs;
-  const otherRb = (await vscode.workspace.openTextDocument(Uri.from({ scheme: 'rbview', path: other + '.rb' }))).getText().split('\n');
+  const otherRb = (await vscode.workspace.openTextDocument(Uri.from({ scheme: 'rubylens', path: other + '.rb' }))).getText().split('\n');
   const inOther = wide.filter((r) => r.uri.path === other + '.rb');
   ok(inOther.length === 30 && inOther.every((r) => otherRb[r.range.start.line].slice(r.range.start.character, r.range.end.character) === 'shoelace'),
     `references in another file (${inOther.length}) are mapped into its view`);
   ok(served.get(other) === 1 && !oneShot.has(other), `parallel lookups into one file share one server request (${served.get(other)})`);
-  ok(servers.length === 1 && oneShot.size === 0, `every view so far came from one rbview serve process (${servers.length} started, ${oneShot.size} one-shot)`);
+  ok(servers.length === 1 && oneShot.size === 0, `every view so far came from one rubylens serve process (${servers.length} started, ${oneShot.size} one-shot)`);
 
   // 9. lookups that fall back to blocks or the nearest line stay cheap in big views: 8x the
   // lookups on an 8x bigger map should take ~8x the time; at O(n) per lookup it's ~64x
@@ -274,14 +274,14 @@ const { SrcMap } = require('../srcmap');
   const after = await openView(tmpRs('after.rs', 3));
   ok(after.includes('def f2') && servers.length === 2, `the next view starts a new server (${servers.length} started)`);
 
-  // 11. an rbview without `serve` (older than the extension): every view comes from `rbview gen`
-  const legacy = path.join(tmp, 'legacy-rbview');
-  fs.writeFileSync(legacy, `#!/bin/sh\n[ "$1" = serve ] && { echo "usage: rbview gen|build" >&2; exit 2; }\nexec "${BIN}" "$@"\n`, { mode: 0o755 });
+  // 11. a RubyLens without `serve` (older than the extension): every view comes from `rubylens gen`
+  const legacy = path.join(tmp, 'legacy-rubylens');
+  fs.writeFileSync(legacy, `#!/bin/sh\n[ "$1" = serve ] && { echo "usage: rubylens gen|build" >&2; exit 2; }\nexec "${BIN}" "$@"\n`, { mode: 0o755 });
   exeSetting = legacy;
   const [l1, l2] = [tmpRs('legacy1.rs', 2), tmpRs('legacy2.rs', 2)];
   const views = [await openView(l1), await openView(l2)];
   ok(views.every((t) => t.includes('def f1')) && oneShot.get(l1) === 1 && oneShot.get(l2) === 1 && servers.length === 3,
-    'without `serve`, views come from one-shot rbview gen (tried serve once)');
+    'without `serve`, views come from one-shot rubylens gen (tried serve once)');
   exeSetting = BIN;
   ext.deactivate();
   fs.rmSync(tmp, { recursive: true, force: true });

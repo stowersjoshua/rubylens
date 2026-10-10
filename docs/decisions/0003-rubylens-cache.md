@@ -1,4 +1,4 @@
-# 0003. Cache views in a self-ignoring `.rbview/` folder, keyed by source and generator
+# 0003. Cache views in a self-ignoring `.rubylens/` folder, keyed by source and generator
 
 Status: Accepted, amended by [0008](0008-views-record-their-symbol-kinds.md)
 Date: 2026-10-09
@@ -9,15 +9,15 @@ Views are generated lazily, but repeated opens, crate-wide symbol lookups and de
 
 ## Decision
 
-- A hidden `.rbview/` folder at the repo root, like `.git` or `.idea`, holds views, maps, `symbols.json`, `_prelude.rb`, and dependency views under `ext/<crate>-<version>/`.
+- A hidden `.rubylens/` folder at the repo root, like `.git` or `.idea`, holds views, maps, `symbols.json`, `_prelude.rb`, and dependency views under `ext/<crate>-<version>/`.
 - It contains its own `.gitignore` (`*`), so it's never committed, without editing the repo's `.gitignore`.
-- Every entry is keyed by a hash of the source **and** of the generator itself. `build.rs` fingerprints `src/` into `RBVIEW_BUILD_ID`. Editing a file or changing rbview invalidates exactly what changed. No manual version bumps are needed.
+- Every entry is keyed by a hash of the source **and** of the generator itself. `build.rs` fingerprints `src/` into `RUBYLENS_BUILD_ID`. Editing a file or changing RubyLens invalidates exactly what changed. No manual version bumps are needed.
 
 The full layout and rules are in [docs/spec/cache.md](../spec/cache.md).
 
 ## Consequences
 
-- Deleting `.rbview/` is always safe.
+- Deleting `.rubylens/` is always safe.
 - Dependency views are shared per repo, not across repos. A global cache could come later.
 - Anything that changes output must change something under `src/`, so the fingerprint changes. Keep generator logic in `src/`.
 

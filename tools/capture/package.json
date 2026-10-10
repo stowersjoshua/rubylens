@@ -1,8 +1,8 @@
 {
-  "name": "rbview-capture",
+  "name": "rubylens-capture",
   "private": true,
   "type": "module",
-  "description": "Captures screenshots and a GIF of rbview running in VS Code (code-server).",
+  "description": "Captures screenshots and a GIF of RubyLens running in VS Code (code-server).",
   "dependencies": {
     "puppeteer-core": "^25.13.0"
   },

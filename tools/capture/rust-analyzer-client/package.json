@@ -2,7 +2,7 @@
   "name": "rust-analyzer",
   "publisher": "rust-lang",
   "displayName": "rust-analyzer (minimal stand-in client)",
-  "description": "Minimal LSP client that launches a rust-analyzer binary. Used only to capture rbview demos where the official extension can't be installed.",
+  "description": "Minimal LSP client that launches a rust-analyzer binary. Used only to capture RubyLens demos where the official extension can't be installed.",
   "version": "0.0.1",
   "license": "MIT",
   "engines": {

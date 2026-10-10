@@ -1,5 +1,5 @@
 # frozen_string_literal: true
-# rbview prelude — stub definitions for the Rust-isms that survive translation.
+# RubyLens prelude — stub definitions for the Rust-isms that survive translation.
 # Nothing here is meant to run; it exists so the Ruby view reads (and indexes) cleanly.
 
 # Result<T, E>
@@ -32,7 +32,7 @@ class Object
   def default = nil
 end
 
-# Raw Rust that rbview didn't translate is wrapped as rust!(%q{ ... }).
+# Raw Rust that RubyLens didn't translate is wrapped as rust!(%q{ ... }).
 def rust!(source) = source
 
 # assert!/assert_eq!/debug_assert!

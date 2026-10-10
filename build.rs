@@ -11,5 +11,5 @@ fn main() {
         println!("cargo:rerun-if-changed={}", f.display());
         std::fs::read(&f).unwrap().hash(&mut h);
     }
-    println!("cargo:rustc-env=RBVIEW_BUILD_ID={:016x}", h.finish());
+    println!("cargo:rustc-env=RUBYLENS_BUILD_ID={:016x}", h.finish());
 }

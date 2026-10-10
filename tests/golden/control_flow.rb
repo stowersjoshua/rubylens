@@ -1,5 +1,5 @@
 # frozen_string_literal: true
-# rbview: read-only Ruby projection of Rust source. Not executable.
+# RubyLens: read-only Ruby projection of Rust source. Not executable.
 # fn find_pair(grid: &[Vec<i32>], target: i32) -> Option<(usize, usize)>
 def find_pair(grid, target)
   grid.enumerate.each do |row, cells|  # 'outer

@@ -1,5 +1,5 @@
 # frozen_string_literal: true
-# rbview: read-only Ruby projection of Rust source. Not executable.
+# RubyLens: read-only Ruby projection of Rust source. Not executable.
 # A 2D point.
 # #[derive(Debug, Clone, Copy, PartialEq)]
 class Point

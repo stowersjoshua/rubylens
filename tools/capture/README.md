@@ -2,7 +2,7 @@
 
 `capture.sh` regenerates everything in `docs/media/`: the README's GIF and screenshots.
 
-It runs the real rbview extension in a real VS Code (code-server, VS Code in the browser) against a real rust-analyzer. A headless Chromium then clicks through the demo, and ffmpeg assembles the GIF. Everything runs in a throwaway profile under a temp folder, so your own VS Code settings and extensions are untouched.
+It runs the real RubyLens extension in a real VS Code (code-server, VS Code in the browser) against a real rust-analyzer. A headless Chromium then clicks through the demo, and ffmpeg assembles the GIF. Everything runs in a throwaway profile under a temp folder, so your own VS Code settings and extensions are untouched.
 
 ```sh
 npm i -g code-server        # or any other code-server install; npm needs the Node version it asks for
@@ -14,7 +14,7 @@ tools/capture/capture.sh
 |---|---|---|
 | `CODE_SERVER` | `code-server` | command that runs code-server; may include arguments |
 | `RUST_ANALYZER` | from `PATH` | rust-analyzer binary |
-| `RBVIEW` | `target/release/rbview` | built automatically if missing |
+| `RUBYLENS` | `target/release/rubylens` | built automatically if missing |
 | `CHROME_PATH` | `@sparticuz/chromium` | any Chromium or Chrome binary |
 | `PORT` | `8737` | |
 | `PUBLISH` | `docs/media` | where the finished files are copied |

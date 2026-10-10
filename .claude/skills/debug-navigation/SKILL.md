@@ -20,7 +20,7 @@ It clicks every identifier in the view and prints each miss with the Ruby line i
 ## 2. Look at the map around the spot
 
 ```sh
-./target/release/rbview gen <file.rs> --json --no-cache > /tmp/v.json
+./target/release/rubylens gen <file.rs> --json --no-cache > /tmp/v.json
 python3 - <<'PY'
 import json
 d = json.load(open('/tmp/v.json')); rb = d['ruby'].split('\n')

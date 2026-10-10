@@ -2,7 +2,7 @@
 """Regression check over a pinned corpus of real crates (tests/corpus/Cargo.lock).
 
 For every .rs file in every corpus crate:
-  * rbview must not crash, and should parse it (raw-source fallback counts as "unparsed")
+  * rubylens must not crash, and should parse it (raw-source fallback counts as "unparsed")
   * the view should be valid Ruby (`ruby -c`)
   * every mapped identifier must land on the same identifier in Rust, or an intended rename
     from src/emit.rs (METHOD_RENAMES / MACRO_RENAMES / KEYWORD_RENAMES)
@@ -12,7 +12,7 @@ For every .rs file in every corpus crate:
 Fails (exit 1) if any threshold is missed. Thresholds reflect the current baseline; raise them
 when you improve things, never lower them to make a change pass without saying why in the PR.
 
-    scripts/corpus-check.py [--rbview target/release/rbview] [--jobs N] [--show 10]
+    scripts/corpus-check.py [--rubylens target/release/rubylens] [--jobs N] [--show 10]
 """
 import argparse
 import concurrent.futures as cf
@@ -26,7 +26,7 @@ import tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MANIFEST = os.path.join(ROOT, "tests/corpus/Cargo.toml")
-DEFAULT_RBVIEW = os.path.join(ROOT, "target/release/rbview")
+DEFAULT_RUBYLENS = os.path.join(ROOT, "target/release/rubylens")
 
 # Baseline (corpus as pinned): 2,789 files, 97.81% valid Ruby, 1 unparsed, 2 of 2.1M
 # identifier tokens mismatched, 99.07% of 2.3M identifiers reachable. Thresholds sit just
@@ -102,12 +102,12 @@ def corpus_files():
     return sorted(files)
 
 
-def check_file(path, rbview, tmp_root, allowed, erased):
-    r = subprocess.run([rbview, "gen", path, "--root", tmp_root, "--json", "--no-cache"], capture_output=True, text=True)
+def check_file(path, rubylens, tmp_root, allowed, erased):
+    r = subprocess.run([rubylens, "gen", path, "--root", tmp_root, "--json", "--no-cache"], capture_output=True, text=True)
     if r.returncode != 0:
         return {"path": path, "crash": r.stderr.strip()[-300:]}
     out = json.loads(r.stdout)
-    if out["ruby"].startswith("# rbview: could not parse"):
+    if out["ruby"].startswith("# RubyLens: could not parse"):
         return {"path": path, "unparsed": True}
     chk = subprocess.run(["ruby", "-c", out["rbPath"]], capture_output=True, text=True)
     rb_lines = out["ruby"].split("\n")
@@ -133,26 +133,26 @@ def check_file(path, rbview, tmp_root, allowed, erased):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--rbview", default=DEFAULT_RBVIEW, help="binary to test (default: rebuilt from this checkout)")
+    ap.add_argument("--rubylens", default=DEFAULT_RUBYLENS, help="binary to test (default: rebuilt from this checkout)")
     ap.add_argument("--jobs", type=int, default=os.cpu_count() or 4)
     ap.add_argument("--show", type=int, default=10, help="examples of each failure kind to print")
     a = ap.parse_args()
     for tool in ("ruby", "cargo"):
         if not shutil.which(tool):
             sys.exit(f"corpus-check needs `{tool}` on PATH")
-    if a.rbview == DEFAULT_RBVIEW:
+    if a.rubylens == DEFAULT_RUBYLENS:
         # Always rebuild: checking a stale binary after editing src/ would report a false OK.
         subprocess.run(["cargo", "build", "--release", "--quiet", "--manifest-path", os.path.join(ROOT, "Cargo.toml")], check=True)
-    if not os.access(a.rbview, os.X_OK):
-        sys.exit(f"rbview binary not found: {a.rbview}")
+    if not os.access(a.rubylens, os.X_OK):
+        sys.exit(f"rubylens binary not found: {a.rubylens}")
 
     allowed = renames()
     erased = erased_by_design()
     files = corpus_files()
-    tmp_root = tempfile.mkdtemp(prefix="rbview-corpus-")
+    tmp_root = tempfile.mkdtemp(prefix="rubylens-corpus-")
     try:
         with cf.ThreadPoolExecutor(a.jobs) as ex:
-            results = list(ex.map(lambda f: check_file(f, a.rbview, tmp_root, allowed, erased), files))
+            results = list(ex.map(lambda f: check_file(f, a.rubylens, tmp_root, allowed, erased), files))
     finally:
         shutil.rmtree(tmp_root, ignore_errors=True)
 

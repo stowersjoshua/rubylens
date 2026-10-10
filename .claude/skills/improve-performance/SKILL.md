@@ -1,6 +1,6 @@
 ---
 name: improve-performance
-description: Use when making rbview faster (generator, cache, build, or the extension's position lookups), when a change might slow it down, or when scripts/scaling-check.py or a cache test fails. Covers measuring, proving output is unchanged, the known traps, and which numbers and docs to update.
+description: Use when making RubyLens faster (generator, cache, build, or the extension's position lookups), when a change might slow it down, or when scripts/scaling-check.py or a cache test fails. Covers measuring, proving output is unchanged, the known traps, and which numbers and docs to update.
 ---
 
 # Improve performance
@@ -11,7 +11,7 @@ Read [docs/performance.md](../../../docs/performance.md) first: it has the curre
 
 ```sh
 scripts/bench-corpus.sh --repeat 3 --top 10 --digest /tmp/before.txt     # the pinned 66-crate corpus
-./target/release/rbview bench <files or dirs> --repeat 3 --top 10          # anything else
+./target/release/rubylens bench <files or dirs> --repeat 3 --top 10          # anything else
 ```
 
 `--top` lists the slowest files with µs/KB: a file far above the others is usually a superlinear path.
@@ -19,12 +19,12 @@ scripts/bench-corpus.sh --repeat 3 --top 10 --digest /tmp/before.txt     # the p
 For anything under ~10% wall clock, compare instruction counts, which don't vary between runs:
 
 ```sh
-valgrind --tool=callgrind --callgrind-out-file=/tmp/cg ./target/release/rbview bench <a few files> --top 0
+valgrind --tool=callgrind --callgrind-out-file=/tmp/cg ./target/release/rubylens bench <a few files> --top 0
 callgrind_annotate --inclusive=yes /tmp/cg | head -60     # where the time goes, callers included
 callgrind_annotate /tmp/cg | head -40                     # self cost: allocation, memcpy, hashing
 ```
 
-For what the editor waits for, time round trips through `rbview serve` (the editor's path) and whole `rbview gen` processes (the fallback), against a built cache (`rbview build <repo>` first), cache hit and `--no-cache`, median of 15 or more. A protocol client is a few lines of Python: write JSON lines, read one line per request.
+For what the editor waits for, time round trips through `rubylens serve` (the editor's path) and whole `rubylens gen` processes (the fallback), against a built cache (`rubylens build <repo>` first), cache hit and `--no-cache`, median of 15 or more. A protocol client is a few lines of Python: write JSON lines, read one line per request.
 
 ## 2. Change, then prove the output is identical
 
@@ -36,7 +36,7 @@ diff /tmp/before.txt /tmp/after.txt        # must be empty
 If you changed `src/range.rs`, also run the debug binary over the corpus: debug builds check every range against the slow path.
 
 ```sh
-cargo build && RBVIEW=target/debug/rbview scripts/bench-corpus.sh --top 0
+cargo build && RUBYLENS=target/debug/rubylens scripts/bench-corpus.sh --top 0
 ```
 
 ## 3. Known traps
@@ -48,8 +48,8 @@ cargo build && RBVIEW=target/debug/rbview scripts/bench-corpus.sh --top 0
 | scanning a line, the output or a list per token | an index built once (`SrcLine`, `innermostIndex` in `srcmap.js`) |
 | reading something from outside the file in the emitter without `Gen::kind_of` | record it as a dep, or cached views go stale silently |
 | writing cache files with `fs::write` | `write_atomic`; editors read views while other `gen` runs write them |
-| a new per-process setup cost in `rbview gen` (loading a table, scanning the cache) | make it lazy; most runs are cache hits that need nothing |
-| parsing a file twice in `rbview build` | `refresh` returns what the file defines from the same parse |
+| a new per-process setup cost in `rubylens gen` (loading a table, scanning the cache) | make it lazy; most runs are cache hits that need nothing |
+| parsing a file twice in `rubylens build` | `refresh` returns what the file defines from the same parse |
 
 ## 4. Check and record
 

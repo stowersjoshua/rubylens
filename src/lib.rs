@@ -1,8 +1,8 @@
-//! rbview — read Rust code as Ruby.
+//! RubyLens — read Rust code as Ruby.
 //!
 //! [`generate`] turns one Rust file into a read-only Ruby projection plus a
 //! position map (see `docs/spec/source-map.md`). [`cache`] keeps views in the
-//! `.rbview/` folder and builds whole repos (see `docs/spec/cache.md`). [`serve`]
+//! `.rubylens/` folder and builds whole repos (see `docs/spec/cache.md`). [`serve`]
 //! answers editors over stdin/stdout (see `docs/spec/serve.md`); the CLI is `main.rs`.
 
 pub mod bench;
@@ -28,7 +28,7 @@ pub const PRELUDE: &str = include_str!("prelude.rb");
 pub fn hash_src(src: &str) -> String {
     let mut h = Sha256::new();
     h.update(GEN_VERSION.to_le_bytes());
-    h.update(env!("RBVIEW_BUILD_ID").as_bytes());
+    h.update(env!("RUBYLENS_BUILD_ID").as_bytes());
     h.update(src.as_bytes());
     h.finalize().iter().take(16).map(|b| format!("{b:02x}")).collect()
 }
@@ -71,7 +71,7 @@ pub struct Generated {
     pub ruby: String,
     pub map: SourceMap,
     pub parse_error: Option<String>,
-    /// The types the file defines (what `rbview build` collects into `symbols.json`).
+    /// The types the file defines (what `rubylens build` collects into `symbols.json`).
     pub defs: KindMap,
 }
 
@@ -95,7 +95,7 @@ pub(crate) fn generate_hashed(src: &str, file: &Path, kinds: &KindMap, hash: Str
         Err(e) => {
             // Fall back to the raw source in a block comment, mapped line-for-line.
             let header = format!(
-                "# rbview: could not parse this file ({} at line {}). Showing the Rust source.\n=begin\n",
+                "# RubyLens: could not parse this file ({} at line {}). Showing the Rust source.\n=begin\n",
                 e,
                 e.span().start().line
             );

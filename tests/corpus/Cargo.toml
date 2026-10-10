@@ -1,8 +1,8 @@
-# The regression corpus: real-world crates rbview must handle (scripts/corpus-check.py).
+# The regression corpus: real-world crates RubyLens must handle (scripts/corpus-check.py).
 # Never built — only fetched, so its dependencies' sources land in the cargo registry.
 # Cargo.lock pins the exact versions, so results are reproducible.
 [package]
-name = "rbview-corpus"
+name = "rubylens-corpus"
 version = "0.0.0"
 edition = "2021"
 publish = false

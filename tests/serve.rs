@@ -1,4 +1,4 @@
-//! `rbview serve` (docs/spec/serve.md): answers exactly what `rbview gen --json` prints, in
+//! `rubylens serve` (docs/spec/serve.md): answers exactly what `rubylens gen --json` prints, in
 //! parallel, keeps up with `symbols.json`, and exits when it should.
 
 use serde_json::{Value, json};
@@ -9,13 +9,13 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use std::time::{Duration, Instant};
 
-const RBVIEW: &str = env!("CARGO_BIN_EXE_rbview");
+const RUBYLENS: &str = env!("CARGO_BIN_EXE_rubylens");
 
 struct Repo(PathBuf);
 
 impl Repo {
     fn new(name: &str) -> Repo {
-        let dir = std::env::temp_dir().join(format!("rbview-serve-test-{name}-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("rubylens-serve-test-{name}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(dir.join("src")).unwrap();
         fs::create_dir_all(dir.join(".git")).unwrap();
@@ -26,7 +26,7 @@ impl Repo {
     fn write(&self, rel: &str, text: &str) -> String {
         let p = self.0.join(rel);
         fs::create_dir_all(p.parent().unwrap()).unwrap();
-        // replace, as an editor's save or `rbview build` does
+        // replace, as an editor's save or `rubylens build` does
         let tmp = p.with_extension("tmp");
         fs::write(&tmp, text).unwrap();
         fs::rename(&tmp, &p).unwrap();
@@ -54,7 +54,7 @@ impl Server {
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .spawn()
-            .expect("start rbview serve");
+            .expect("start rubylens serve");
         let stdin = child.stdin.take();
         let stdout = BufReader::new(child.stdout.take().unwrap());
         Server { child, stdin, stdout }
@@ -100,7 +100,7 @@ impl Drop for Server {
 }
 
 fn gen_json(file: &str, root: &Path) -> Value {
-    let out = Command::new(RBVIEW).args(["gen", file, "--root", root.to_str().unwrap(), "--json"]).output().unwrap();
+    let out = Command::new(RUBYLENS).args(["gen", file, "--root", root.to_str().unwrap(), "--json"]).output().unwrap();
     assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
     serde_json::from_slice(&out.stdout).unwrap()
 }
@@ -112,7 +112,7 @@ fn answers_what_gen_json_prints() {
         .write("src/lib.rs", "pub mod a;\npub struct Point { x: i32 }\nimpl Point { fn x(&self) -> i32 { self.x } }\n");
     let a = r.write("src/a.rs", "pub fn twice(v: Vec<u32>) -> Vec<u32> { v.iter().map(|x| x * 2).collect() }\n");
     let root = r.0.to_str().unwrap();
-    let mut s = Server::start(Path::new(RBVIEW), &[]);
+    let mut s = Server::start(Path::new(RUBYLENS), &[]);
     let got = s.ask(&[
         json!({"id": 1, "method": "gen", "file": lib, "root": root}),
         json!({"id": "two", "method": "gen", "file": a, "root": root}),
@@ -127,7 +127,7 @@ fn answers_what_gen_json_prints() {
         printed["cached"] = Value::Null;
         assert_eq!(served, printed, "{file}");
     }
-    assert_eq!(got["3"]["result"]["version"], rbview::GEN_VERSION);
+    assert_eq!(got["3"]["result"]["version"], rubylens::GEN_VERSION);
 }
 
 #[test]
@@ -135,7 +135,7 @@ fn parallel_requests_are_matched_by_id() {
     let r = Repo::new("parallel");
     let files: Vec<String> =
         (0..12).map(|i| r.write(&format!("src/m{i}.rs"), &format!("pub fn f{i}() -> u32 {{ {i} }}\n"))).collect();
-    let mut s = Server::start(Path::new(RBVIEW), &[]);
+    let mut s = Server::start(Path::new(RUBYLENS), &[]);
     let reqs: Vec<Value> = (0..36)
         .map(|n| json!({"id": n, "method": "gen", "file": files[n % 12], "root": r.0, "noCache": n % 3 == 0}))
         .collect();
@@ -150,7 +150,7 @@ fn parallel_requests_are_matched_by_id() {
 fn errors_are_answered_and_the_server_carries_on() {
     let r = Repo::new("errors");
     let ok = r.write("src/lib.rs", "pub fn f() {}\n");
-    let mut s = Server::start(Path::new(RBVIEW), &[]);
+    let mut s = Server::start(Path::new(RUBYLENS), &[]);
     s.send("this is not json");
     let bad = s.recv().unwrap();
     assert!(bad["id"].is_null() && bad["error"].as_str().unwrap().contains("not a JSON request"));
@@ -170,15 +170,15 @@ fn errors_are_answered_and_the_server_carries_on() {
 fn follows_symbols_json_without_a_restart() {
     let r = Repo::new("kinds");
     let area = r.write("src/area.rs", "impl Shape {}\n");
-    let mut s = Server::start(Path::new(RBVIEW), &[]);
+    let mut s = Server::start(Path::new(RUBYLENS), &[]);
     let mut view = |n: u32| {
         let got = s.ask(&[json!({"id": n, "method": "gen", "file": area, "root": r.0})]);
         got[&n.to_string()]["result"]["ruby"].as_str().unwrap().to_string()
     };
     assert!(view(1).contains("class Shape"));
-    r.write(".rbview/symbols.json", r#"{"kinds": {"Shape": "enum"}}"#);
+    r.write(".rubylens/symbols.json", r#"{"kinds": {"Shape": "enum"}}"#);
     assert!(view(2).contains("module Shape"), "a new symbols.json is read");
-    r.write(".rbview/symbols.json", r#"{"kinds": {"Shape": "struct"}}"#);
+    r.write(".rubylens/symbols.json", r#"{"kinds": {"Shape": "struct"}}"#);
     assert!(view(3).contains("class Shape"), "and again");
 }
 
@@ -186,7 +186,7 @@ fn follows_symbols_json_without_a_restart() {
 fn exits_when_stdin_closes_after_answering() {
     let r = Repo::new("eof");
     let f = r.write("src/lib.rs", &"pub fn f() -> u32 { 1 }\n".repeat(200));
-    let mut s = Server::start(Path::new(RBVIEW), &[]);
+    let mut s = Server::start(Path::new(RUBYLENS), &[]);
     for n in 0..4 {
         s.send(&json!({"id": n, "method": "gen", "file": f, "root": r.0, "noCache": true}).to_string());
     }
@@ -198,7 +198,7 @@ fn exits_when_stdin_closes_after_answering() {
 
 #[test]
 fn exits_when_idle() {
-    let mut s = Server::start(Path::new(RBVIEW), &["--idle-exit", "1"]);
+    let mut s = Server::start(Path::new(RUBYLENS), &["--idle-exit", "1"]);
     s.send(&json!({"id": 1, "method": "ping"}).to_string());
     assert!(s.recv().is_some());
     assert!(s.wait_exit(Duration::from_secs(10)).is_some_and(|st| st.success()), "should exit after 1 s idle");
@@ -208,14 +208,14 @@ fn exits_when_idle() {
 #[test]
 fn exits_when_its_binary_is_replaced() {
     let r = Repo::new("upgrade");
-    let exe = r.0.join("rbview-copy");
-    fs::copy(RBVIEW, &exe).unwrap();
+    let exe = r.0.join("rubylens-copy");
+    fs::copy(RUBYLENS, &exe).unwrap();
     let mut s = Server::start(&exe, &[]);
     s.send(&json!({"id": 1, "method": "ping"}).to_string());
     assert!(s.recv().is_some());
     // what `cargo install` does: a new file renamed over the old path
-    let new = r.0.join("rbview-new");
-    fs::copy(RBVIEW, &new).unwrap();
+    let new = r.0.join("rubylens-new");
+    fs::copy(RUBYLENS, &new).unwrap();
     fs::rename(&new, &exe).unwrap();
     s.send(&json!({"id": 2, "method": "ping"}).to_string());
     assert!(s.recv().is_none(), "the old binary must not answer");

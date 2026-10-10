@@ -17,7 +17,7 @@ Check `docs/intent.md`. In order: navigation never lies, then faithful over pret
 - Add the smallest *plausible* Rust that shows the construct, including an edge case. It's parsed, never compiled.
 - See the current output:
   ```sh
-  cargo build --release && ./target/release/rbview gen tests/golden/<area>.rs --no-cache
+  cargo build --release && ./target/release/rubylens gen tests/golden/<area>.rs --no-cache
   ```
 
 ## 3. Change the emitter
@@ -41,7 +41,7 @@ Read every changed line. Unrelated diffs mean you changed more than you meant to
 
 ## 5. Update the spec
 
-Edit the matching row in `docs/spec/translation.md`, or add one, and cite the case as `[golden/<area>](../../tests/golden/<area>.rs)`. For a known limitation that yields invalid Ruby, add the marker `// rbview-golden: ruby-invalid (reason)` to the case and list it under "Known limitations".
+Edit the matching row in `docs/spec/translation.md`, or add one, and cite the case as `[golden/<area>](../../tests/golden/<area>.rs)`. For a known limitation that yields invalid Ruby, add the marker `// rubylens-golden: ruby-invalid (reason)` to the case and list it under "Known limitations".
 
 ## 6. Run the full regression
 

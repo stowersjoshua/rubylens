@@ -1,6 +1,6 @@
 {
-  "name": "rbview",
-  "displayName": "rbview — Read Rust as Ruby",
+  "name": "rubylens",
+  "displayName": "RubyLens — Read Rust as Ruby",
   "description": "Open any Rust file as a generated, read-only Ruby view. Go to definition, hover, references and outline work through rust-analyzer.",
   "version": "0.1.0",
   "publisher": "local",
@@ -8,40 +8,40 @@
   "engines": { "vscode": "^1.85.0" },
   "categories": ["Programming Languages", "Other"],
   "main": "./extension.js",
-  "activationEvents": ["onLanguage:rust", "onFileSystem:rbview"],
+  "activationEvents": ["onLanguage:rust", "onFileSystem:rubylens"],
   "extensionDependencies": ["rust-lang.rust-analyzer"],
   "contributes": {
     "commands": [
-      { "command": "rbview.open", "title": "Open as Ruby", "category": "rbview", "icon": "$(ruby)" },
-      { "command": "rbview.showRust", "title": "Show Rust Source", "category": "rbview", "icon": "$(go-to-file)" },
-      { "command": "rbview.buildCache", "title": "Pre-generate Ruby Views for Workspace", "category": "rbview" }
+      { "command": "rubylens.open", "title": "Open as Ruby", "category": "RubyLens", "icon": "$(ruby)" },
+      { "command": "rubylens.showRust", "title": "Show Rust Source", "category": "RubyLens", "icon": "$(go-to-file)" },
+      { "command": "rubylens.buildCache", "title": "Pre-generate Ruby Views for Workspace", "category": "RubyLens" }
     ],
     "menus": {
       "editor/title": [
-        { "command": "rbview.open", "when": "resourceLangId == rust", "group": "navigation" },
-        { "command": "rbview.showRust", "when": "resourceScheme == rbview", "group": "navigation" }
+        { "command": "rubylens.open", "when": "resourceLangId == rust", "group": "navigation" },
+        { "command": "rubylens.showRust", "when": "resourceScheme == rubylens", "group": "navigation" }
       ],
       "explorer/context": [
-        { "command": "rbview.open", "when": "resourceExtname == .rs", "group": "navigation" }
+        { "command": "rubylens.open", "when": "resourceExtname == .rs", "group": "navigation" }
       ],
       "commandPalette": [
-        { "command": "rbview.open", "when": "resourceLangId == rust" },
-        { "command": "rbview.showRust", "when": "resourceScheme == rbview" }
+        { "command": "rubylens.open", "when": "resourceLangId == rust" },
+        { "command": "rubylens.showRust", "when": "resourceScheme == rubylens" }
       ]
     },
     "keybindings": [
-      { "command": "rbview.open", "key": "ctrl+alt+r", "mac": "cmd+alt+r", "when": "editorLangId == rust" },
-      { "command": "rbview.showRust", "key": "ctrl+alt+r", "mac": "cmd+alt+r", "when": "resourceScheme == rbview" }
+      { "command": "rubylens.open", "key": "ctrl+alt+r", "mac": "cmd+alt+r", "when": "editorLangId == rust" },
+      { "command": "rubylens.showRust", "key": "ctrl+alt+r", "mac": "cmd+alt+r", "when": "resourceScheme == rubylens" }
     ],
     "configuration": {
-      "title": "rbview",
+      "title": "RubyLens",
       "properties": {
-        "rbview.executable": {
+        "rubylens.executable": {
           "type": "string",
-          "default": "rbview",
-          "description": "Path to the rbview binary (built with `cargo install --path .`)."
+          "default": "rubylens",
+          "description": "Path to the rubylens binary (built with `cargo install --path .`)."
         },
-        "rbview.openBeside": {
+        "rubylens.openBeside": {
           "type": "boolean",
           "default": true,
           "description": "Open the Ruby view beside the Rust file rather than replacing it."

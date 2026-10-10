@@ -1,5 +1,5 @@
 # frozen_string_literal: true
-# rbview: read-only Ruby projection of Rust source. Not executable.
+# RubyLens: read-only Ruby projection of Rust source. Not executable.
 # use std::fmt::Write
 
 # fn report(name: &str, score: f64, tags: &[&str]) -> String

@@ -6,7 +6,7 @@
 #   scripts/check-the-checks.sh      (needs ruby; takes a few minutes)
 set -uo pipefail
 SRC="$(cd "$(dirname "$0")/.." && pwd)"
-N="$(mktemp -d)/rbview"
+N="$(mktemp -d)/rubylens"
 trap 'rm -rf "$(dirname "$N")"' EXIT
 git clone -q "$SRC" "$N" && cd "$N"
 git config core.hooksPath .githooks
@@ -64,7 +64,7 @@ printf 'x\n' > note.txt && git add note.txt
 caught "commit-msg hook (identity)" "an AI tool's identity" git -c user.name=Claude -c user.email=noreply@anthropic.com commit -q -F scripts/fixtures/commit-msg-clean.txt
 
 echo "8. a cache folder committed"
-mkdir -p .rbview && printf 'x' > .rbview/leak.rb && git add -f .rbview/leak.rb
+mkdir -p .rubylens && printf 'x' > .rubylens/leak.rb && git add -f .rubylens/leak.rb
 caught "no tracked build output" "^no tracked build output +✗" scripts/check.sh
 
 echo "9. a doc link that points nowhere"

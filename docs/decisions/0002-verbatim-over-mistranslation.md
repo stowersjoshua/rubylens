@@ -16,7 +16,7 @@ When there's no honest translation, keep the Rust as written:
 
 Verbatim regions must still navigate: a jump into or out of them lands on the exact token.
 
-Valid Ruby syntax is a goal, but a lower one. A view may be syntactically invalid Ruby when the only "fix" would mislead. The known case is bindings inside or-patterns (`A(x) | B(x)`), which Ruby forbids. Such golden cases carry a `// rbview-golden: ruby-invalid (reason)` marker.
+Valid Ruby syntax is a goal, but a lower one. A view may be syntactically invalid Ruby when the only "fix" would mislead. The known case is bindings inside or-patterns (`A(x) | B(x)`), which Ruby forbids. Such golden cases carry a `// rubylens-golden: ruby-invalid (reason)` marker.
 
 ## Consequences
 

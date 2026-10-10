@@ -1,7 +1,7 @@
-// rbview — read Rust as Ruby, with navigation delegated to rust-analyzer.
+// RubyLens — read Rust as Ruby, with navigation delegated to rust-analyzer.
 //
 // A Rust file `/repo/src/foo.rs` is shown as the virtual document
-// `rbview:/repo/src/foo.rs.rb`. Every language feature on that document is
+// `rubylens:/repo/src/foo.rs.rb`. Every language feature on that document is
 // answered by mapping the position back to Rust, asking rust-analyzer
 // (through VS Code's execute*Provider commands), and mapping the answer forward.
 'use strict';
@@ -13,8 +13,8 @@ const path = require('path');
 const { SrcMap } = require('./srcmap');
 const { GenServer, ServerGone } = require('./server');
 
-const SCHEME = 'rbview';
-/** rbview uri string -> { map: SrcMap, version } */
+const SCHEME = 'rubylens';
+/** rubylens uri string -> { map: SrcMap, version } */
 const maps = new Map();
 const changed = new vscode.EventEmitter();
 let output;
@@ -28,16 +28,16 @@ function rsUriFor(rbUri) {
 }
 
 function exe() {
-  return vscode.workspace.getConfiguration('rbview').get('executable') || 'rbview';
+  return vscode.workspace.getConfiguration('rubylens').get('executable') || 'rubylens';
 }
 
-/** The repo whose .rbview/ folder caches this file (deps cache under the active repo). */
+/** The repo whose .rubylens/ folder caches this file (deps cache under the active repo). */
 function rootFor(rsUri) {
   const wf = vscode.workspace.getWorkspaceFolder(rsUri) || (vscode.workspace.workspaceFolders || [])[0];
   return wf ? wf.uri.fsPath : path.dirname(rsUri.fsPath);
 }
 
-/** The `rbview serve` process for the configured executable (a new one if the setting changes). */
+/** The `rubylens serve` process for the configured executable (a new one if the setting changes). */
 let server = null;
 
 function genServer() {
@@ -49,7 +49,7 @@ function genServer() {
   return server;
 }
 
-/** At most this many one-shot `rbview gen` processes at once (a reference list can span hundreds of files). */
+/** At most this many one-shot `rubylens gen` processes at once (a reference list can span hundreds of files). */
 const MAX_GEN = Math.max(2, os.cpus().length);
 let running = 0;
 const waiting = [];
@@ -66,7 +66,7 @@ async function limited(job) {
   }
 }
 
-/** The view and map for a Rust file, from the server, or from `rbview gen` if the server can't answer. */
+/** The view and map for a Rust file, from the server, or from `rubylens gen` if the server can't answer. */
 async function runGen(rsUri) {
   try {
     return await genServer().request({ method: 'gen', file: rsUri.fsPath, root: rootFor(rsUri) });
@@ -105,13 +105,13 @@ class RubyViewProvider {
       maps.set(uri.toString(), new SrcMap(res.map));
       return res.ruby;
     } catch (e) {
-      output.appendLine(`rbview: ${e.message}`);
-      return `# rbview failed for ${rsUri.fsPath}\n# ${String(e.message).split('\n').join('\n# ')}\n`;
+      output.appendLine(`RubyLens: ${e.message}`);
+      return `# RubyLens failed for ${rsUri.fsPath}\n# ${String(e.message).split('\n').join('\n# ')}\n`;
     }
   }
 }
 
-/** rbview uri string -> Promise of the view being opened (so parallel lookups share one `rbview gen`) */
+/** rubylens uri string -> Promise of the view being opened (so parallel lookups share one `rubylens gen`) */
 const opening = new Map();
 
 /** Ensure the Ruby view (and its map) for a Rust file is loaded. */
@@ -164,7 +164,7 @@ function locationProvider(command) {
     const { result, origin } = await viaRust(document, position, command);
     if (!result) return null;
     const list = Array.isArray(result) ? result : [result];
-    // targets in different files are mapped in parallel (each may need its own `rbview gen`)
+    // targets in different files are mapped in parallel (each may need its own `rubylens gen`)
     const out = await Promise.all(list.map((loc) => forwardLocation(loc, origin)));
     return out.filter(Boolean);
   };
@@ -220,12 +220,12 @@ async function openRubyView(uri) {
   const editor = vscode.window.activeTextEditor;
   const rsUri = uri instanceof vscode.Uri ? uri : editor && editor.document.uri;
   if (!rsUri || !rsUri.path.endsWith('.rs')) {
-    return vscode.window.showWarningMessage('rbview: open a Rust file first.');
+    return vscode.window.showWarningMessage('RubyLens: open a Rust file first.');
   }
   const rbUri = rbUriFor(rsUri);
   const doc = await vscode.workspace.openTextDocument(rbUri);
   await vscode.languages.setTextDocumentLanguage(doc, 'ruby');
-  const beside = vscode.workspace.getConfiguration('rbview').get('openBeside', true);
+  const beside = vscode.workspace.getConfiguration('rubylens').get('openBeside', true);
   const shown = await vscode.window.showTextDocument(doc, {
     viewColumn: beside ? vscode.ViewColumn.Beside : vscode.ViewColumn.Active,
     preview: false,
@@ -259,13 +259,13 @@ function buildCache() {
   if (!folders.length) return;
   const root = folders[0].uri.fsPath;
   return vscode.window.withProgress(
-    { location: vscode.ProgressLocation.Notification, title: 'rbview: generating Ruby views…' },
+    { location: vscode.ProgressLocation.Notification, title: 'RubyLens: generating Ruby views…' },
     () =>
       new Promise((resolve) => {
         cp.execFile(exe(), ['build', root], { maxBuffer: 64 * 1024 * 1024 }, (err, _stdout, stderr) => {
           output.appendLine(stderr);
-          if (err) vscode.window.showErrorMessage(`rbview build failed: ${err.message}`);
-          else vscode.window.showInformationMessage(stderr.split('\n')[0] || 'rbview: done');
+          if (err) vscode.window.showErrorMessage(`RubyLens: building views failed: ${err.message}`);
+          else vscode.window.showInformationMessage(stderr.split('\n')[0] || 'RubyLens: done');
           resolve();
         });
       }),
@@ -273,7 +273,7 @@ function buildCache() {
 }
 
 function activate(context) {
-  output = vscode.window.createOutputChannel('rbview');
+  output = vscode.window.createOutputChannel('RubyLens');
   const sel = { scheme: SCHEME };
   context.subscriptions.push(
     output,
@@ -286,9 +286,9 @@ function activate(context) {
     vscode.languages.registerHoverProvider(sel, { provideHover }),
     vscode.languages.registerDocumentHighlightProvider(sel, { provideDocumentHighlights: provideHighlights }),
     vscode.languages.registerDocumentSymbolProvider(sel, { provideDocumentSymbols: provideSymbols }),
-    vscode.commands.registerCommand('rbview.open', openRubyView),
-    vscode.commands.registerCommand('rbview.showRust', showRust),
-    vscode.commands.registerCommand('rbview.buildCache', buildCache),
+    vscode.commands.registerCommand('rubylens.open', openRubyView),
+    vscode.commands.registerCommand('rubylens.showRust', showRust),
+    vscode.commands.registerCommand('rubylens.buildCache', buildCache),
     // keep open views fresh when the Rust source is saved
     vscode.workspace.onDidSaveTextDocument((doc) => {
       if (doc.uri.path.endsWith('.rs')) {

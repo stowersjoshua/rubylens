@@ -1,10 +1,10 @@
-// Client for `rbview serve`: one long-running rbview process answers every view request, so
+// Client for `rubylens serve`: one long-running RubyLens process answers every view request, so
 // opening a view doesn't start a process (see docs/spec/serve.md).
 // Pure Node (no vscode import) so it can be tested with plain node.
 //
 // Requests and responses are JSON lines matched by id. A request the server didn't answer,
-// because it couldn't start (an rbview without `serve`) or went away (crash, idle exit, its
-// binary replaced), fails with `ServerGone`: the caller falls back to one-shot `rbview gen`,
+// because it couldn't start (a RubyLens without `serve`) or went away (crash, idle exit, its
+// binary replaced), fails with `ServerGone`: the caller falls back to one-shot `rubylens gen`,
 // and the next request starts a fresh server.
 'use strict';
 
@@ -16,7 +16,7 @@ class ServerGone extends Error {}
 const MAX_FAILED_STARTS = 3;
 
 class GenServer {
-  /** @param {string} exe rbview executable  @param {(line: string) => void} [log] */
+  /** @param {string} exe rubylens executable  @param {(line: string) => void} [log] */
   constructor(exe, log) {
     this.exe = exe;
     this.log = log || (() => {});
@@ -43,7 +43,7 @@ class GenServer {
     const proc = cp.spawn(this.exe, ['serve'], { stdio: ['pipe', 'pipe', 'pipe'] });
     proc.answered = 0;
     this.proc = proc;
-    if (proc.pid) this.log(`rbview serve started (${this.exe}, pid ${proc.pid})`);
+    if (proc.pid) this.log(`rubylens serve started (${this.exe}, pid ${proc.pid})`);
     // Split stdout into lines in O(size): responses can be megabytes, arriving in 64 KB chunks.
     let parts = [];
     proc.stdout.setEncoding('utf8');
@@ -59,7 +59,7 @@ class GenServer {
       if (start < chunk.length) parts.push(chunk.slice(start));
     });
     proc.stderr.setEncoding('utf8');
-    proc.stderr.on('data', (d) => this.log(`rbview serve: ${String(d).trimEnd()}`));
+    proc.stderr.on('data', (d) => this.log(`rubylens serve: ${String(d).trimEnd()}`));
     proc.stdin.on('error', () => {}); // EPIPE when it has died; 'exit' handles the requests
     proc.on('error', (e) => this.gone(proc, e.message, e.code === 'ENOENT'));
     // 'close', not 'exit': it comes after the last of stdout has been read
@@ -71,7 +71,7 @@ class GenServer {
     try {
       msg = JSON.parse(line);
     } catch (e) {
-      this.log(`rbview serve: unreadable response: ${e.message}`);
+      this.log(`rubylens serve: unreadable response: ${e.message}`);
       return;
     }
     const p = this.pending.get(msg.id);
@@ -90,13 +90,13 @@ class GenServer {
     if (this.proc === proc) this.proc = null;
     if (proc.answered === 0) {
       this.failedStarts++;
-      // exit code 2 is an rbview that doesn't know `serve` (usage error); ENOENT, no rbview at all
+      // exit code 2 is a RubyLens that doesn't know `serve` (usage error); ENOENT, no RubyLens at all
       if (unsupported || this.failedStarts >= MAX_FAILED_STARTS) {
-        this.unavailable = `rbview serve is unavailable (${why}); using one rbview process per view`;
+        this.unavailable = `rubylens serve is unavailable (${why}); using one rubylens process per view`;
         this.log(this.unavailable);
       }
     } else if (this.pending.size) {
-      this.log(`rbview serve ${why}; retrying its unanswered requests one by one`);
+      this.log(`rubylens serve ${why}; retrying its unanswered requests one by one`);
     }
     for (const [id, p] of this.pending) {
       if (p.proc !== proc) continue;

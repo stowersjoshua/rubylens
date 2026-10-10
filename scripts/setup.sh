@@ -11,7 +11,7 @@ npm install --silent --no-audit --no-fund
 echo "✓ lint tooling installed"
 
 cargo build --release --quiet
-echo "✓ rbview built (target/release/rbview)"
+echo "✓ rubylens built (target/release/rubylens)"
 
 missing=()
 command -v ruby >/dev/null || missing+=("ruby (golden + corpus syntax checks)")

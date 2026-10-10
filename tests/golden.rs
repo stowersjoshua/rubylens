@@ -7,15 +7,15 @@
 //! 3. **accuracy**: a mapped identifier lands on the same identifier in Rust (or an allowed rename)
 //! 4. **coverage**: nearly every Rust identifier is reachable from the Ruby view
 //! 5. **ruby -c**: the view is valid Ruby (if `ruby` is installed), unless the case is marked
-//!    `// rbview-golden: ruby-invalid (...)`, in which case it must stay invalid
+//!    `// rubylens-golden: ruby-invalid (...)`, in which case it must stay invalid
 //! 6. **spec link**: every case is referenced from docs/spec/translation.md and vice versa
 //!
 //! Update snapshots after an intended change:  UPDATE_GOLDEN=1 cargo test --test golden
 //! then review them like code:                 git diff tests/golden
 
 use proc_macro2::{TokenStream, TokenTree};
-use rbview::emit::{DROPPED_METHODS, KEYWORD_RENAMES, MACRO_RENAMES, METHOD_RENAMES};
-use rbview::{SourceMap, generate};
+use rubylens::emit::{DROPPED_METHODS, KEYWORD_RENAMES, MACRO_RENAMES, METHOD_RENAMES};
+use rubylens::{SourceMap, generate};
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -283,12 +283,12 @@ fn views_are_valid_ruby_unless_marked() {
         eprintln!("ruby not installed; skipping `ruby -c` checks");
         return;
     }
-    let dir = std::env::temp_dir().join(format!("rbview-golden-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("rubylens-golden-{}", std::process::id()));
     fs::create_dir_all(&dir).unwrap();
     let mut bad = vec![];
     for path in cases() {
         let c = run(&path);
-        let marked_invalid = c.rust.contains("rbview-golden: ruby-invalid");
+        let marked_invalid = c.rust.contains("rubylens-golden: ruby-invalid");
         let file = dir.join(format!("{}.rb", c.name));
         fs::write(&file, &c.ruby).unwrap();
         let out = Command::new("ruby").arg("-c").arg(&file).output().unwrap();
@@ -299,7 +299,7 @@ fn views_are_valid_ruby_unless_marked() {
                 String::from_utf8_lossy(&out.stderr).lines().next().unwrap_or("")
             )),
             (true, true) => {
-                bad.push(format!("{}: now valid Ruby — remove its `rbview-golden: ruby-invalid` marker", c.name))
+                bad.push(format!("{}: now valid Ruby — remove its `rubylens-golden: ruby-invalid` marker", c.name))
             }
             _ => {}
         }

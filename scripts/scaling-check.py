@@ -2,11 +2,11 @@
 """Generation must scale linearly with input size.
 
 Writes synthetic Rust files in the shapes that have been superlinear before (deep nesting,
-long lines, long match expressions, ...) at size n and 8n, times them with `rbview bench`
+long lines, long match expressions, ...) at size n and 8n, times them with `rubylens bench`
 (release build, in-process, best of several runs), and fails if 8x the input takes more
 than MAX_RATIO times as long. Linear is ~8x; O(n^2) is ~64x.
 
-    scripts/scaling-check.py [--rbview target/release/rbview]
+    scripts/scaling-check.py [--rubylens target/release/rubylens]
 
 See docs/performance.md.
 """
@@ -69,7 +69,7 @@ CASES = [  # (name, generator, n): n is chosen so the small file takes a millise
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--rbview", default=os.path.join(ROOT, "target/release/rbview"))
+    ap.add_argument("--rubylens", default=os.path.join(ROOT, "target/release/rubylens"))
     args = ap.parse_args()
     with tempfile.TemporaryDirectory() as tmp:
         files = {}
@@ -80,7 +80,7 @@ def main():
                     f.write(gen(size))
                 files[(name, size)] = path
         out = subprocess.run(
-            [args.rbview, "bench", *files.values(), "--repeat", "5", "--top", str(len(files))],
+            [args.rubylens, "bench", *files.values(), "--repeat", "5", "--top", str(len(files))],
             capture_output=True, text=True, check=True,
         ).stdout
     ms = {}

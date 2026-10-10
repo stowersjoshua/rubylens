@@ -1,13 +1,13 @@
-//! `rbview bench` — in-process generator benchmark (no process-spawn noise, single-threaded).
+//! `rubylens bench` — in-process generator benchmark (no process-spawn noise, single-threaded).
 //!
-//!   rbview bench <file-or-dir>... [--repeat N] [--top K] [--digest FILE]
+//!   rubylens bench <file-or-dir>... [--repeat N] [--top K] [--digest FILE]
 //!
 //! Reports per-phase totals (read, parse, emit, map JSON), throughput, per-file latency
 //! percentiles and the slowest files. `--digest FILE` writes one `sha256  path` line per file
 //! over the generated Ruby + map, so optimizations can be proven output-identical:
 //!
-//!   rbview bench <corpus> --digest before.txt   # on the old code
-//!   rbview bench <corpus> --digest after.txt    # on the new code
+//!   rubylens bench <corpus> --digest before.txt   # on the old code
+//!   rubylens bench <corpus> --digest after.txt    # on the new code
 //!   diff before.txt after.txt                   # must be empty
 //!
 //! See docs/performance.md.
@@ -88,7 +88,7 @@ fn measure(file: &Path, kinds: &crate::KindMap, digest: bool) -> (Phases, String
     ph.json = t.elapsed();
 
     // proc-macro2 keeps every parsed file's line table in a thread-local map that only grows;
-    // clear it so each file is measured the way `rbview gen` sees it (one file per process).
+    // clear it so each file is measured the way `rubylens gen` sees it (one file per process).
     proc_macro2::extra::invalidate_current_thread_spans();
 
     if !digest {
@@ -141,7 +141,7 @@ pub fn run(args: &[String]) {
         collect(p, &mut files);
     }
     if files.is_empty() {
-        eprintln!("rbview bench: no .rs files under {paths:?}");
+        eprintln!("rubylens bench: no .rs files under {paths:?}");
         std::process::exit(2);
     }
     let kinds = crate::KindMap::default();

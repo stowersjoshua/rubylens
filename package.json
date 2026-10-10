@@ -1,5 +1,5 @@
 {
-  "name": "rbview-dev",
+  "name": "rubylens-dev",
   "private": true,
   "description": "Development tooling only (linting). The extension's own manifest is editors/vscode/package.json.",
   "scripts": {

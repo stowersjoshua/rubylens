@@ -1,5 +1,5 @@
 # frozen_string_literal: true
-# rbview: read-only Ruby projection of Rust source. Not executable.
+# RubyLens: read-only Ruby projection of Rust source. Not executable.
 # #[derive(Debug)]
 module Shape  # enum
   Circle = Data.define(:radius) { include Shape }  # { radius: f64 }

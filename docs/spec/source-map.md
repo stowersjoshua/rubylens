@@ -4,7 +4,7 @@ Every view comes with a map that translates positions between the Ruby view and 
 
 ## Format
 
-`rbview gen <file> --json` prints `{ "rbPath", "cached", "ruby", "map" }`. The cache stores the map as `<view>.rb.map.json`:
+`rubylens gen <file> --json` prints `{ "rbPath", "cached", "ruby", "map" }`. The cache stores the map as `<view>.rb.map.json`:
 
 ```json
 {

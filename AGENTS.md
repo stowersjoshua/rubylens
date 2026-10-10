@@ -4,7 +4,7 @@ Guidance for anyone, human or AI agent, changing this repository. Read it before
 
 ## What this is
 
-rbview shows Rust source as a read-only Ruby projection, so Rubyists can read Rust. Every identifier in the view maps back to its Rust token, and navigation (definition, hover, references) is answered by rust-analyzer. **Read [docs/intent.md](docs/intent.md) first.** Its principles decide every trade-off below.
+RubyLens shows Rust source as a read-only Ruby projection, so Rubyists can read Rust. Every identifier in the view maps back to its Rust token, and navigation (definition, hover, references) is answered by rust-analyzer. **Read [docs/intent.md](docs/intent.md) first.** Its principles decide every trade-off below.
 
 ## Repository map
 
@@ -14,10 +14,10 @@ rbview shows Rust source as a read-only Ruby projection, so Rubyists can read Ru
 | `src/out.rs` | output buffer: UTF-16 position tracking, segments, verbatim lines |
 | `src/range.rs` | source ranges of items, statements and arms read off the syntax tree (for the block map) |
 | `src/lib.rs` / `src/main.rs` | `generate()` / the CLI (`gen`, `build`, `serve`, `bench`) |
-| `src/cache.rs` | the `.rbview/` cache: when a view is reused, symbol kinds, `rbview build` |
-| `src/serve.rs` | `rbview serve`: the long-running process editors ask for views ([spec](docs/spec/serve.md)) |
-| `src/bench.rs` | `rbview bench`: in-process phase timings and output digests ([performance](docs/performance.md)) |
-| `editors/vscode/` | VS Code extension: `extension.js` (providers), `server.js` (the `rbview serve` client), `srcmap.js` (position lookup), prebuilt `.vsix`, tests |
+| `src/cache.rs` | the `.rubylens/` cache: when a view is reused, symbol kinds, `rubylens build` |
+| `src/serve.rs` | `rubylens serve`: the long-running process editors ask for views ([spec](docs/spec/serve.md)) |
+| `src/bench.rs` | `rubylens bench`: in-process phase timings and output digests ([performance](docs/performance.md)) |
+| `editors/vscode/` | VS Code extension: `extension.js` (providers), `server.js` (the `rubylens serve` client), `srcmap.js` (position lookup), prebuilt `.vsix`, tests |
 | `tests/golden/` | golden cases (`*.rs` → `*.rb`): the executable translation spec |
 | `tests/corpus/` | the pinned 66-crate regression corpus (fetched, never built) |
 | `docs/` | [intent](docs/intent.md), [specs](docs/spec/), [decision records](docs/decisions/), [testing](docs/testing.md), [performance](docs/performance.md) |
@@ -55,8 +55,8 @@ scripts/check.sh --full                           # + 66-crate corpus + real rus
 UPDATE_GOLDEN=1 cargo test --test golden          # rewrite golden snapshots (then review the diff)
 scripts/check-the-checks.sh                       # after changing any check: proves each still catches its mistake
 scripts/bench-corpus.sh --repeat 3 --digest FILE  # time generation on the corpus; diff digests to prove output unchanged
-cargo build --release && ./target/release/rbview gen path/to/file.rs   # print one view
-./target/release/rbview gen path/to/file.rs --json                     # view + map
+cargo build --release && ./target/release/rubylens gen path/to/file.rs   # print one view
+./target/release/rubylens gen path/to/file.rs --json                     # view + map
 ```
 
 ## Commits and PRs
@@ -68,8 +68,8 @@ cargo build --release && ./target/release/rbview gen path/to/file.rs   # print o
   - `.githooks/commit-msg` rejects attribution in any commit message, and commits made under an AI tool's identity. Run `scripts/setup.sh` to enable it.
   - `.claude/settings.json` turns off Claude Code's attribution, and its PreToolUse hook blocks `git commit` and `gh pr` commands containing attribution.
   - `scripts/attribution-check.sh --range` checks every commit message and identity in a CI range.
-- **Don't commit** `target/`, `node_modules/` or `.rbview/` (enforced), or scratch files.
-- **The `.vsix`** (`editors/vscode/rbview-0.1.0.vsix`) is what users install. Rebuild it whenever any `editors/vscode/*.js` or the extension's `package.json` changes (enforced).
+- **Don't commit** `target/`, `node_modules/` or `.rubylens/` (enforced), or scratch files.
+- **The `.vsix`** (`editors/vscode/rubylens-0.1.0.vsix`) is what users install. Rebuild it whenever any `editors/vscode/*.js` or the extension's `package.json` changes (enforced).
 - **PRs** fill in `.github/pull_request_template.md`.
 
 ## Gotchas
@@ -80,7 +80,7 @@ cargo build --release && ./target/release/rbview gen path/to/file.rs   # print o
 - **The cache invalidates itself** when anything in `src/` changes (`build.rs` fingerprint). Don't add manual version bumps. `GEN_VERSION` is only for map format changes.
 - **Knowledge from outside the file** (today only `symbols.json` kinds) must go through `Gen::kind_of`, which records it in the map's `deps`. Anything read around it makes cached views go stale silently ([0008](docs/decisions/0008-views-record-their-symbol-kinds.md)).
 - **The demo view** `examples/demo/shapes.rb` must be regenerated after output changes (enforced).
-- **Editors use `rbview serve`**, not `rbview gen`. Both print `View::to_json`; keep it that way, so a view is the same however it's produced. The server keeps nothing in memory but `symbols.json` ([0009](docs/decisions/0009-rbview-serve.md)).
+- **Editors use `rubylens serve`**, not `rubylens gen`. Both print `View::to_json`; keep it that way, so a view is the same however it's produced. The server keeps nothing in memory but `symbols.json` ([0009](docs/decisions/0009-rubylens-serve.md)).
 - **Keep generation linear.** Don't call `to_token_stream()` on items or statements (use `node_range`), look up a span's position once, and never rescan a line or list per token. `scripts/scaling-check.py` fails otherwise ([performance](docs/performance.md)).
 - **Formatting:** rustfmt uses `max_width = 120`. Run `cargo fmt` rather than hand-wrapping.
 - **The live Claude Code hook** blocks any Bash command that contains both `git commit` and attribution text, even a test. Keep such text in fixture files (see `scripts/fixtures/`).

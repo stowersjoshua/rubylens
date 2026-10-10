@@ -1,4 +1,4 @@
-# rbview for VS Code
+# RubyLens for VS Code
 
 Open any Rust file as a generated, read-only **Ruby view**. Navigation is answered by rust-analyzer, so it's precise:
 
@@ -10,9 +10,9 @@ Open any Rust file as a generated, read-only **Ruby view**. Navigation is answer
 
 - Click the Ruby icon in a Rust editor's title bar, or press `Ctrl+Alt+R` (`Cmd+Alt+R` on macOS). The Ruby view opens beside the Rust file at the same spot.
 - In a Ruby view, `Ctrl+Alt+R` (or the title-bar button) jumps back to the Rust source.
-- **rbview: Pre-generate Ruby Views for Workspace** warms the `.rbview/` cache for the whole repo.
+- **RubyLens: Pre-generate Ruby Views for Workspace** warms the `.rubylens/` cache for the whole repo.
 
 ## Requirements
 
-- The `rbview` binary on your `PATH`, or set `rbview.executable`.
+- The `rubylens` binary on your `PATH`, or set `rubylens.executable`.
 - The rust-analyzer extension.

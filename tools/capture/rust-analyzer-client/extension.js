@@ -1,5 +1,5 @@
 'use strict';
-// Stand-in for the official rust-analyzer VS Code extension (same extension id, so rbview's
+// Stand-in for the official rust-analyzer VS Code extension (same extension id, so RubyLens's
 // extensionDependencies are satisfied). Like the real one, it just launches the
 // rust-analyzer binary over LSP; it also shows a status-bar check once indexing is done.
 const vscode = require('vscode');

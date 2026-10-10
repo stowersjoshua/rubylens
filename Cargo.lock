@@ -132,7 +132,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "rbview"
+name = "rubylens"
 version = "0.1.0"
 dependencies = [
  "mimalloc",

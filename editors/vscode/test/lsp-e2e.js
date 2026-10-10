@@ -2,11 +2,11 @@
 //
 // Replays exactly what the VS Code extension does for each request:
 //   Ruby position --srcmap--> Rust position --LSP--> rust-analyzer
-//   --> target Rust location --rbview gen + srcmap--> Ruby view position
+//   --> target Rust location --rubylens gen + srcmap--> Ruby view position
 // and checks that the Ruby text at the landing spot is the identifier rust-analyzer pointed at.
 //
 // Usage:
-//   node test/lsp-e2e.js --ra <rust-analyzer> --rbview <rbview> --project <dir> --file <rel.rs> [--file ...]
+//   node test/lsp-e2e.js --ra <rust-analyzer> --rubylens <binary> --project <dir> --file <rel.rs> [--file ...]
 //                        [--limit N] [--all-features] [--min PCT] [--verbose]
 //
 // --min PCT: exit 1 unless definitions, references and outline each land correctly at least
@@ -24,7 +24,7 @@ const args = process.argv.slice(2);
 const opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
 const all = (k) => args.flatMap((a, i) => (a === k ? [args[i + 1]] : []));
 const RA = opt('--ra', 'rust-analyzer');
-const RBVIEW = opt('--rbview', path.resolve(__dirname, '../../../target/release/rbview'));
+const RUBYLENS = opt('--rubylens', path.resolve(__dirname, '../../../target/release/rubylens'));
 const PROJECT = path.resolve(opt('--project', '.'));
 const FILES = all('--file');
 const LIMIT = Number(opt('--limit', '400'));
@@ -92,7 +92,7 @@ class Lsp {
 const views = new Map(); // rs path -> { lines, map, rsLines }
 function view(rsPath) {
   if (!views.has(rsPath)) {
-    const res = JSON.parse(cp.execFileSync(RBVIEW, ['gen', rsPath, '--root', PROJECT, '--json'], { maxBuffer: 1 << 28 }));
+    const res = JSON.parse(cp.execFileSync(RUBYLENS, ['gen', rsPath, '--root', PROJECT, '--json'], { maxBuffer: 1 << 28 }));
     views.set(rsPath, {
       lines: res.ruby.split('\n'),
       map: new SrcMap(res.map),

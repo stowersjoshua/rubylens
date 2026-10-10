@@ -4,7 +4,7 @@ import js from '@eslint/js';
 import globals from 'globals';
 
 export default [
-  { ignores: ['**/node_modules/**', 'target/**', '**/.rbview/**', '**/*.vsix'] },
+  { ignores: ['**/node_modules/**', 'target/**', '**/.rubylens/**', '**/*.vsix'] },
   js.configs.recommended,
   {
     files: ['**/*.js'],

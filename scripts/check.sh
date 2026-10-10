@@ -28,26 +28,26 @@ step() { # step <name> <command...>
 # ---------------------------------------------------------------- repository rules
 tracked_junk() {
   local junk
-  junk="$(git ls-files | grep -E '(^|/)(target|node_modules|\.rbview)/' || true)"
+  junk="$(git ls-files | grep -E '(^|/)(target|node_modules|\.rubylens)/' || true)"
   [ -z "$junk" ] || { echo "build output or caches are tracked:"; echo "$junk"; return 1; }
 }
 vsix_in_sync() {
   # The committed .vsix is what users install; it must contain the current extension source.
   python3 - <<'PY'
 import glob, os, sys, zipfile
-z = zipfile.ZipFile("editors/vscode/rbview-0.1.0.vsix")
+z = zipfile.ZipFile("editors/vscode/rubylens-0.1.0.vsix")
 shipped = set(z.namelist())
 source = ["package.json"] + sorted(os.path.basename(p) for p in glob.glob("editors/vscode/*.js"))
 bad = [f for f in source
        if "extension/" + f not in shipped or z.read("extension/" + f) != open("editors/vscode/" + f, "rb").read()]
 if bad:
-    sys.exit("editors/vscode/rbview-0.1.0.vsix is stale for: " + ", ".join(bad)
-             + "\nrebuild: (cd editors/vscode && npx @vscode/vsce package --allow-missing-repository --skip-license -o rbview-0.1.0.vsix)")
+    sys.exit("editors/vscode/rubylens-0.1.0.vsix is stale for: " + ", ".join(bad)
+             + "\nrebuild: (cd editors/vscode && npx @vscode/vsce package --allow-missing-repository --skip-license -o rubylens-0.1.0.vsix)")
 PY
 }
 demo_view_fresh() {
-  ./target/release/rbview gen examples/demo/src/shapes.rs --root examples/demo --no-cache | diff -u examples/demo/shapes.rb - \
-    || { echo "examples/demo/shapes.rb is stale: ./target/release/rbview gen examples/demo/src/shapes.rs --root examples/demo --no-cache > examples/demo/shapes.rb"; return 1; }
+  ./target/release/rubylens gen examples/demo/src/shapes.rs --root examples/demo --no-cache | diff -u examples/demo/shapes.rb - \
+    || { echo "examples/demo/shapes.rb is stale: ./target/release/rubylens gen examples/demo/src/shapes.rs --root examples/demo --no-cache > examples/demo/shapes.rb"; return 1; }
 }
 markdown_links() {
   python3 - <<'PY'
@@ -67,7 +67,7 @@ if bad:
 PY
 }
 unpushed_attribution() {
-  local range="${RBVIEW_CHECK_RANGE:-}"
+  local range="${RUBYLENS_CHECK_RANGE:-}"
   if [ -z "$range" ]; then
     git rev-parse -q --verify origin/master >/dev/null || { echo "no origin/master; skipped"; return 0; }
     range="origin/master..HEAD"
