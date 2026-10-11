@@ -23,7 +23,8 @@ RubyLens shows Rust source as a read-only Ruby projection, so Rubyists can read 
 | `docs/` | [intent](docs/intent.md), [specs](docs/spec/), [decision records](docs/decisions/), [testing](docs/testing.md), [performance](docs/performance.md) |
 | `scripts/` | `check.sh` (run before committing), `setup.sh`, corpus/LSP checks, attribution guard |
 | `tools/capture/` | regenerates `docs/media/` screenshots and the GIF in real VS Code |
-| `.claude/` | shared Claude Code settings, hooks and skills |
+| `.claude/` | shared Claude Code settings, hooks and skills for working on RubyLens |
+| `plugins/rubylens/`, `.claude-plugin/` | the agent plugin RubyLens's users install: skills for *their* agents to explain Rust as Ruby and set RubyLens up ([0011](docs/decisions/0011-agent-skills-quote-the-view.md)) |
 
 ## Non-negotiables
 
@@ -80,6 +81,7 @@ cargo build --release && ./target/release/rubylens gen path/to/file.rs   # print
 - **The cache invalidates itself** when anything in `src/` changes (`build.rs` fingerprint). Don't add manual version bumps. `GEN_VERSION` is only for map format changes.
 - **Knowledge from outside the file** (today only `symbols.json` kinds) must go through `Gen::kind_of`, which records it in the map's `deps`. Anything read around it makes cached views go stale silently ([0008](docs/decisions/0008-views-record-their-symbol-kinds.md)).
 - **The demo view** `examples/demo/shapes.rb` must be regenerated after output changes (enforced).
+- **Two kinds of skills.** `.claude/skills/` guide work on this repo. `plugins/rubylens/skills/` ship to users' agents, so the CLI's commands and flags, the view's header lines, the block map, the extension's command titles, settings and keys, and the Ruby they quote are a contract with them. Change both in one commit; `scripts/plugin-check.py` fails otherwise. One version number covers the crate, the extension and the plugin (enforced).
 - **Editors use `rubylens serve`**, not `rubylens gen`. Both print `View::to_json`; keep it that way, so a view is the same however it's produced. The server keeps nothing in memory but `symbols.json` ([0009](docs/decisions/0009-rubylens-serve.md)).
 - **Keep generation linear.** Don't call `to_token_stream()` on items or statements (use `node_range`), look up a span's position once, and never rescan a line or list per token. `scripts/scaling-check.py` fails otherwise ([performance](docs/performance.md)).
 - **Formatting:** rustfmt uses `max_width = 120`. Run `cargo fmt` rather than hand-wrapping.

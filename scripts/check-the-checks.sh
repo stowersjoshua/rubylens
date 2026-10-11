@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Checks the checks: injects realistic mistakes into a throwaway clone of the current commit
 # and requires each to be caught by the check that claims to catch it. Run it after changing
-# scripts/check.sh, tests/golden.rs, scripts/corpus-check.py or the attribution guards.
+# scripts/check.sh, tests/golden.rs, scripts/corpus-check.py, scripts/plugin-check.py or the attribution guards.
 #
 #   scripts/check-the-checks.sh      (needs ruby; takes a few minutes)
 set -uo pipefail
@@ -111,6 +111,14 @@ caught "server tests (stale kinds)" "follows_symbols_json_without_a_restart.*FAI
 echo "18. the extension drops the requests a dead server didn't answer"
 mutate editors/vscode/extension.js 'if (!(e instanceof ServerGone)) throw e;' 'throw e;'
 caught "extension tests (server crash)" "FAIL: all 8 views open" node editors/vscode/test/run.js
+
+echo "19. an agent skill tells agents to use a flag rubylens doesn't have"
+mutate plugins/rubylens/skills/setup-rubylens/SKILL.md 'rubylens gen src/lib.rs | head -20' 'rubylens gen src/lib.rs --lines 1-20'
+caught "agent plugin (commands)" "commands: .*has no --lines" scripts/plugin-check.py
+
+echo "20. an agent skill shows Ruby that RubyLens doesn't generate"
+mutate plugins/rubylens/skills/read-rust-as-ruby/SKILL.md '`.try!`' '`.try?`'
+caught "agent plugin (examples)" "examples: .*try\\?" scripts/plugin-check.py
 
 echo
 echo "$pass caught, $fail missed"

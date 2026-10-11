@@ -9,6 +9,7 @@
 | `editors/vscode/srcmap.js` or `extension.js` | `scripts/check.sh --full`, rebuild the `.vsix`, and regenerate media if the UI changed |
 | anything for speed | `scripts/bench-corpus.sh --digest` before and after (output must be identical), then `scripts/check.sh --full` ([performance](performance.md)) |
 | how the demo looks | `tools/capture/capture.sh`, then review every still |
+| `plugins/rubylens/` (the agent skills) | `scripts/check.sh`, then try the skill as a user would: `claude --plugin-dir plugins/rubylens` in a Rust project |
 
 `scripts/check.sh` runs every step and then reports. Setup is one command: `scripts/setup.sh`.
 
@@ -27,6 +28,7 @@
 | **generation scales linearly** | 8x the input takes < 20x the time, for the shapes that have been superlinear before (deep nesting, long lines, long matches, …) | `scripts/scaling-check.py` |
 | attribution guards | the commit-msg hook and Claude Code hook still block AI attribution | `scripts/guard-selftest.sh` |
 | repo rules | no tracked build output, `.vsix` matches source, demo view fresh, markdown links resolve, no attribution in unpushed commits | `scripts/check.sh` |
+| **agent plugin** | the skills users' agents follow name only real commands, flags, view lines, extension commands, settings, keys and repository files; their Ruby examples are real output; the excerpt helper finds every demo function; the manifests are valid and share the project's version | `scripts/plugin-check.py` |
 | **corpus** (`--full`) | 2,789 files from 66 pinned crates: no crashes, ≥ 97.7% valid Ruby, ≤ 0.01% identifier mismatches, ≥ 98.8% of Rust identifiers reachable | `scripts/corpus-check.py`, `tests/corpus/` |
 | **navigation** (`--full`) | against a real rust-analyzer, 100% of resolved definitions, references and outline symbols land on the right Ruby token | `scripts/lsp-check.sh` |
 | media capture | the real extension in real VS Code | `tools/capture/` |
@@ -47,7 +49,7 @@ The corpus thresholds in `scripts/corpus-check.py` sit just below the measured b
 
 ## Checking the checks
 
-`scripts/check-the-checks.sh` injects realistic mistakes into a throwaway clone and requires each to be caught by the check that claims it. Examples: an unmapped token, a rename hidden in code, an uncited golden case, a stale `.vsix`, an attributed commit or an AI author identity, a tracked cache folder, a broken link, identifiers that silently stop mapping, a stale cached view, half-written cache files, and quadratic generation or lookups. It tests the last commit, so commit first. **Run it after changing any check**, and add a case when you add a check.
+`scripts/check-the-checks.sh` injects realistic mistakes into a throwaway clone and requires each to be caught by the check that claims it. Examples: an unmapped token, a rename hidden in code, an uncited golden case, a stale `.vsix`, an attributed commit or an AI author identity, a tracked cache folder, a broken link, identifiers that silently stop mapping, a stale cached view, half-written cache files, quadratic generation or lookups, and an agent skill that cites a flag or Ruby RubyLens doesn't have. It tests the last commit, so commit first. **Run it after changing any check**, and add a case when you add a check.
 
 ## Requirements
 

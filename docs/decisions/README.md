@@ -14,6 +14,7 @@ Short records of choices that shape RubyLens, so nobody (human or agent) has to 
 | [0008](0008-views-record-their-symbol-kinds.md) | Cached views record the symbol kinds they relied on | Accepted |
 | [0009](0009-rubylens-serve.md) | Editors talk to a long-running `rubylens serve` | Accepted |
 | [0010](0010-name-rubylens.md) | The project is called RubyLens | Accepted |
+| [0011](0011-agent-skills-quote-the-view.md) | Agent skills quote the view; they never translate | Accepted |
 
 ## When to write one
 

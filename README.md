@@ -52,7 +52,7 @@ cargo install --path .                                  # puts `rubylens` on you
 code --install-extension editors/vscode/rubylens-0.1.0.vsix
 ```
 
-Requires the rust-analyzer VS Code extension.
+Requires the rust-analyzer VS Code extension. Without a clone, `cargo install --locked --git https://github.com/stowersjoshua/rubylens rubylens` installs the command.
 
 ## Use
 
@@ -61,6 +61,22 @@ Requires the rust-analyzer VS Code extension.
   - `rubylens gen src/foo.rs` prints one view.
   - `rubylens build` pre-generates every `.rs` file in the repo.
   - `rubylens serve` answers view requests over stdin/stdout. The extension starts it for you, so views open without starting a process each time.
+
+### With an AI agent
+
+RubyLens comes with a plugin of two [Agent Skills](https://agentskills.io) for your coding agent:
+
+- **read-rust-as-ruby** explains Rust by quoting RubyLens's view, with each snippet tied to its Rust lines. Without it, an agent asked for "this Rust as Ruby" writes its own translation, which drifts from the code.
+- **setup-rubylens** installs, updates and troubleshoots RubyLens.
+
+In Claude Code:
+
+```sh
+claude plugin marketplace add stowersjoshua/rubylens
+claude plugin install rubylens@rubylens
+```
+
+Then ask something like "explain `Canvas::load` in src/shapes.rs as Ruby". Inside a session, Claude Code 2.1.275 or later also takes `/plugin install rubylens --marketplace stowersjoshua/rubylens`. Other agents that read Agent Skills can use the folders in [plugins/rubylens/skills/](plugins/rubylens/skills/) as they are.
 
 ## Screenshots
 

@@ -1,0 +1,10 @@
+{
+  "name": "rubylens",
+  "version": "0.1.0",
+  "description": "Explain Rust to Rubyists by quoting RubyLens's generated Ruby view of the code, with every snippet tied to its Rust lines. Also sets RubyLens up.",
+  "author": { "name": "Joshua Stowers" },
+  "homepage": "https://github.com/stowersjoshua/rubylens",
+  "repository": "https://github.com/stowersjoshua/rubylens",
+  "license": "MIT",
+  "keywords": ["rust", "ruby", "code-reading", "rust-analyzer"]
+}

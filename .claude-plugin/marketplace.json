@@ -1,0 +1,12 @@
+{
+  "name": "rubylens",
+  "description": "RubyLens: read Rust as Ruby",
+  "owner": { "name": "Joshua Stowers" },
+  "plugins": [
+    {
+      "name": "rubylens",
+      "source": "./plugins/rubylens",
+      "description": "Explain Rust to Rubyists by quoting RubyLens's generated Ruby view, and set RubyLens up"
+    }
+  ]
+}

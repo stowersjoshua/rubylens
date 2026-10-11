@@ -96,6 +96,7 @@ step "attribution guards"            scripts/guard-selftest.sh
 step "no tracked build output"       tracked_junk
 step ".vsix matches source"          vsix_in_sync
 step "demo view up to date"          demo_view_fresh
+step "agent plugin matches RubyLens"  scripts/plugin-check.py
 step "markdown links"                markdown_links
 step "no attribution in commits"     unpushed_attribution
 step "git hooks enabled"             hooks_enabled

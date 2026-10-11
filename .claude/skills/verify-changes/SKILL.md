@@ -13,6 +13,7 @@ description: Use before committing or declaring any change to RubyLens done, or 
 | anything else | `scripts/check.sh` |
 | `src/emit.rs`, `src/out.rs`, `src/lib.rs`, `editors/vscode/srcmap.js` | `scripts/check.sh --full` |
 | how the demo looks | also `tools/capture/capture.sh` (see the `update-extension` skill) |
+| `plugins/rubylens/` (skills for users' agents) | `scripts/check.sh`, then try the skill as a user would: `claude --plugin-dir plugins/rubylens` in a Rust project |
 | anything for speed | `scripts/bench-corpus.sh --digest` before and after must match (see the `improve-performance` skill) |
 | a check itself (`scripts/check.sh`, `tests/golden.rs`, corpus or guard scripts) | commit, then `scripts/check-the-checks.sh`, which tests the last commit |
 
@@ -37,6 +38,7 @@ First run in a fresh clone? `scripts/setup.sh` enables the git hooks and install
 | navigation | jumps land wrong against real rust-analyzer | `debug-navigation` skill |
 | generation scales linearly | some input shape got superlinear (the failing case says which) | find the per-token or per-level rescan (`improve-performance` skill); never raise `MAX_RATIO` |
 | cache tests | a view is reused when stale, regenerated when fresh, or written non-atomically | read `docs/spec/cache.md`; anything the emitter learns from outside the file goes through `Gen::kind_of` |
+| agent plugin matches RubyLens | a skill in `plugins/rubylens/skills/` names a command, flag, view line, extension command, setting, key, file or Ruby example that RubyLens doesn't have; or the manifests or versions disagree | if RubyLens changed on purpose, update the skill in the same commit; copy new Ruby examples from `rubylens gen` output, never write them; bump the version in `Cargo.toml`, the extension and `plugin.json` together |
 | server tests | `rubylens serve` answers differently from `rubylens gen --json`, mixes up ids, keeps stale state, or doesn't exit when it should | `docs/spec/serve.md`; both commands must go through `View::to_json`, and the server keeps nothing but `symbols.json` |
 
 ## Never
