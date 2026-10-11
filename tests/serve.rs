@@ -48,12 +48,19 @@ struct Server {
 
 impl Server {
     fn start(exe: &Path, args: &[&str]) -> Server {
-        let mut child = Command::new(exe)
-            .arg("serve")
-            .args(args)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .spawn()
+        let spawn = || Command::new(exe).arg("serve").args(args).stdin(Stdio::piped()).stdout(Stdio::piped()).spawn();
+        // A binary this test just copied is "busy" (ETXTBSY) while a child forked by another test
+        // thread still holds the copy's write handle, until that child execs. Wait it out.
+        let mut child = (0..100)
+            .map(|_| spawn())
+            .find(|r| {
+                let busy = matches!(r, Err(e) if e.kind() == std::io::ErrorKind::ExecutableFileBusy);
+                if busy {
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+                !busy
+            })
+            .unwrap_or_else(spawn)
             .expect("start rubylens serve");
         let stdin = child.stdin.take();
         let stdout = BufReader::new(child.stdout.take().unwrap());
